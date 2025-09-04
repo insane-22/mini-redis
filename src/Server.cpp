@@ -52,6 +52,24 @@ int main(int argc, char **argv) {
 
   int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
   std::cout << "Client connected\n";
+  std::string response = "-ERR unknown command\r\n";
+  
+  char buffer[1024];
+  while(true){
+    memset(buffer, 0, sizeof(buffer));
+    int bytes_received = recv(client_fd, buffer, sizeof(buffer)-1, 0);
+    if(bytes_received<=0){
+      std::cerr << "Client disconnected or error occurred\n";
+      break;
+    }
+
+    std::string request(buffer, bytes_received);
+    if (request.find("PING") != std::string::npos){
+      send(client_fd, response.c_str(), response.size(), 0);
+    }else {
+      send(client_fd, response.c_str(), response.size(), 0);
+    }
+  }
 
   std::string response = "+PONG\r\n";
   send(client_fd, response.c_str(), response.size(), 0);
