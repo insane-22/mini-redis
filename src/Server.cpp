@@ -9,9 +9,10 @@
 #include <netdb.h>
 #include <thread>
 #include <vector>
+#include "Handler.hpp"
 
 void handleResponse(int client_fd) {
-  std::string response = "+PONG\r\n";
+  Handler handler(client_fd);
   
   char buffer[1024];
   while(true){
@@ -22,8 +23,8 @@ void handleResponse(int client_fd) {
       break;
     }
 
-    std::string request(buffer, bytes_received);
-    send(client_fd, response.c_str(), response.size(), 0);
+    std::string message(buffer, bytes_received);
+    handler.handleMessage(message);
   }
   close(client_fd);
 }
@@ -39,8 +40,7 @@ int main(int argc, char **argv) {
   }
   
   int reuse = 1;
-  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-    std::cerr << "setsockopt failed\n";
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {    std::cerr << "setsockopt failed\n";
     return 1;
   }
   
