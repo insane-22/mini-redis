@@ -8,4 +8,6 @@ public:
     void handleMessage(const std::string& message);
 private:
     void sendResponse(const std::string& response);
+    void handleSetCommand(const std::vector<std::string>& tokens);
+    void handleGetCommand(const std::vector<std::string>& tokens);
 };
