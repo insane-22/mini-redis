@@ -13,4 +13,5 @@ private:
     void handleRpushCommand(const std::vector<std::string>& tokens);
     void handleLrangeCommand(const std::vector<std::string>& tokens);
     void handleLpushCommand(const std::vector<std::string>& tokens);
+    void handleLlenCommand(const std::vector<std::string>& tokens);
 };

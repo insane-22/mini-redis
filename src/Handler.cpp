@@ -39,6 +39,8 @@ void Handler::handleMessage(const std::string& message) {
             handleLrangeCommand(cmd.args);
         } else if(cmd.name =="LPUSH"){
             handleLpushCommand(cmd.args);
+        } else if(cmd.name =="LLEN"){
+            handleLlenCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -175,5 +177,23 @@ void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
     auto& list = list_store[key];
     list.insert(list.begin(), values.begin(), values.end());
 
+    sendResponse(":" + std::to_string(list.size()) + "\r\n");
+}
+
+void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
+    if (tokens.size() < 1) {
+        sendResponse("-Error: LLEN requires a key\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+
+    auto it = list_store.find(key);
+    if (it == list_store.end()) {
+        sendResponse("*0\r\n");
+        return;
+    }
+
+    auto& list = list_store[key];
     sendResponse(":" + std::to_string(list.size()) + "\r\n");
 }
