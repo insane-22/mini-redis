@@ -170,6 +170,7 @@ void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
 
     const std::string& key = tokens[0];
     std::vector<std::string> values(tokens.begin() + 1, tokens.end());
+    reverse(values.begin(), values.end());
 
     auto& list = list_store[key];
     list.insert(list.begin(), values.begin(), values.end());
