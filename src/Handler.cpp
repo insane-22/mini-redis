@@ -190,7 +190,7 @@ void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
 
     auto it = list_store.find(key);
     if (it == list_store.end()) {
-        sendResponse("*0\r\n");
+        sendResponse(":0\r\n");
         return;
     }
 
