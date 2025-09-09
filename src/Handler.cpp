@@ -35,6 +35,8 @@ void Handler::handleMessage(const std::string& message) {
             handleGetCommand(cmd.args); 
         } else if(cmd.name == "RPUSH") {
             handleRpushCommand(cmd.args);
+        } else if(cmd.name =="LRANGE"){
+            handleLrangeCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -112,3 +114,48 @@ void Handler::handleRpushCommand(const std::vector<std::string>& tokens) {
 
     sendResponse(":" + std::to_string(list.size()) + "\r\n");
 }   
+
+void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) {
+        sendResponse("-Error: LRANGE requires a key, start, and stop\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    int start, stop;
+
+    try {
+        start = std::stoi(tokens[1]);
+        stop = std::stoi(tokens[2]);
+    } catch (...) {
+        sendResponse("-Error: Invalid start or stop value\r\n");
+        return;
+    }
+
+    auto it = list_store.find(key);
+    if (it == list_store.end()) {
+        sendResponse("*0\r\n");
+        return;
+    }
+
+    const auto& list = it->second;
+    int list_size = list.size();
+
+    if (start < 0) start += list_size;
+    if (stop < 0) stop += list_size;
+
+    if (start < 0) start = 0;
+    if (stop >= list_size) stop = list_size - 1;
+    if (start > stop || start >= list_size) {
+        sendResponse("*0\r\n");
+        return;
+    }
+
+    int range_size = stop - start + 1;
+    std::string response = "*" + std::to_string(range_size) + "\r\n";
+    for (int i = start; i <= stop; ++i) {
+        response += "$" + std::to_string(list[i].size()) + "\r\n" + list[i] + "\r\n";
+    }
+
+    sendResponse(response);
+}
