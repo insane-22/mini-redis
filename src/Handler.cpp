@@ -37,6 +37,8 @@ void Handler::handleMessage(const std::string& message) {
             handleRpushCommand(cmd.args);
         } else if(cmd.name =="LRANGE"){
             handleLrangeCommand(cmd.args);
+        } else if(cmd.name =="LPUSH"){
+            handleLpushCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -158,4 +160,19 @@ void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
     }
 
     sendResponse(response);
+}
+
+void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) {
+        sendResponse("-Error: LPUSH requires a key and at least one value\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    std::vector<std::string> values(tokens.begin() + 1, tokens.end());
+
+    auto& list = list_store[key];
+    list.insert(list.begin(), values.begin(), values.end());
+
+    sendResponse(":" + std::to_string(list.size()) + "\r\n");
 }
