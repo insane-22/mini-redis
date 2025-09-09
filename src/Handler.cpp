@@ -41,6 +41,8 @@ void Handler::handleMessage(const std::string& message) {
             handleLpushCommand(cmd.args);
         } else if(cmd.name =="LLEN"){
             handleLlenCommand(cmd.args);
+        } else if(cmd.name =="LPOP"){
+            handleLpopCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -196,4 +198,37 @@ void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
 
     auto& list = list_store[key];
     sendResponse(":" + std::to_string(list.size()) + "\r\n");
+}
+
+void Handler::handleLpopCommand(const std::vector<std::string>&tokens){
+    if(tokens.size()<1){
+        sendResponse("-Error: LPOP requires a key\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+
+    auto it = list_store.find(key);
+    if (it == list_store.end()) {
+        sendResponse("$-1\r\n");
+        return;
+    }
+
+    auto& list = list_store[key];
+    if(tokens.size()==1){
+        std::string value = list[0];
+        list.erase(list.begin(),list.begin()+1);
+        sendResponse("$" + std::to_string(value.size()) + "\r\n" + value + "\r\n");
+    }else{
+        int size=stoi(tokens[1]);
+        if(size>list.size()) size=list.size();
+        std::vector<std::string> values(list.begin(), list.begin() + size);
+        list.erase(list.begin(),list.begin()+size);
+
+        std::string response = "*" + std::to_string(size) + "\r\n";
+        for (int i=0;i<size;i++) {
+            response += "$" + std::to_string(values[i].size()) + "\r\n" + values[i] + "\r\n";
+        }
+        sendResponse(response);
+    }
 }

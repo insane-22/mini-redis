@@ -14,4 +14,5 @@ private:
     void handleLrangeCommand(const std::vector<std::string>& tokens);
     void handleLpushCommand(const std::vector<std::string>& tokens);
     void handleLlenCommand(const std::vector<std::string>& tokens);
+    void handleLpopCommand(const std::vector<std::string>& tokens);
 };
