@@ -5,7 +5,6 @@
 #include <chrono>
 #include <optional>
 
-
 using Clock = std::chrono::steady_clock;
 using TimePoint = std::chrono::time_point<Clock>;
 
@@ -16,6 +15,7 @@ struct ValueWithExpiry {
 
 Handler::Handler(int client_fd) : client_fd(client_fd) {}
 static std::unordered_map<std::string, ValueWithExpiry> kv_store;
+static std::unordered_map<std::string, std::vector<std::string>> list_store;
 
 void Handler::handleMessage(const std::string& message) {
     Parser parser;
@@ -32,7 +32,9 @@ void Handler::handleMessage(const std::string& message) {
         } else if (cmd.name == "SET") {
             handleSetCommand(cmd.args);
         } else if (cmd.name == "GET") {
-            handleGetCommand(cmd.args);
+            handleGetCommand(cmd.args); 
+        } else if(cmd.name == "RPUSH") {
+            handleRpushCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -70,7 +72,6 @@ void Handler::handleSetCommand(const std::vector<std::string>& tokens) {
     sendResponse("+OK\r\n");
 }
 
-
 void Handler::handleGetCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 1) {
         sendResponse("-Error: GET requires a key\r\n");
@@ -93,7 +94,21 @@ void Handler::handleGetCommand(const std::vector<std::string>& tokens) {
     }
 }
 
-
 void Handler::sendResponse(const std::string& response) {
     send(client_fd, response.c_str(), response.size(), 0);
 }
+
+void Handler::handleRpushCommand(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 2) {
+        sendResponse("-Error: RPUSH requires a key and at least one value\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    std::vector<std::string> values(tokens.begin() + 1, tokens.end());
+
+    auto& list = list_store[key];
+    list.insert(list.end(), values.begin(), values.end());
+
+    sendResponse(":" + std::to_string(list.size()) + "\r\n");
+}   
