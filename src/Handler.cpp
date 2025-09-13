@@ -254,7 +254,7 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
     }
 
     const std::string& key = tokens[0];
-    int timeout=std::stoi(tokens[1]);
+    double timeout=std::stod(tokens[1]);
 
     std::unique_lock<std::mutex> lock(store_mutex);
     auto list_has_data = [&]() {
@@ -265,7 +265,7 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
         if(timeout==0){
             cv.wait(lock, list_has_data);
         }else{
-            if(!cv.wait_for(lock, std::chrono::seconds(timeout), list_has_data)) {
+            if(!cv.wait_for(lock, std::chrono::duration<double>(timeout), list_has_data)) {
                 sendResponse("$-1\r\n");
                 return;
             }
