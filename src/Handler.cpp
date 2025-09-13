@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <chrono>
 #include <optional>
+#include<mutex>
+#include<condition_variable>
 
 using Clock = std::chrono::steady_clock;
 using TimePoint = std::chrono::time_point<Clock>;
@@ -16,6 +18,8 @@ struct ValueWithExpiry {
 Handler::Handler(int client_fd) : client_fd(client_fd) {}
 static std::unordered_map<std::string, ValueWithExpiry> kv_store;
 static std::unordered_map<std::string, std::vector<std::string>> list_store;
+static std::mutex store_mutex;
+static std::condition_variable cv;
 
 void Handler::handleMessage(const std::string& message) {
     Parser parser;
@@ -43,6 +47,8 @@ void Handler::handleMessage(const std::string& message) {
             handleLlenCommand(cmd.args);
         } else if(cmd.name =="LPOP"){
             handleLpopCommand(cmd.args);
+        } else if (cmd.name == "BLPOP"){
+            handleBlpopCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -115,10 +121,14 @@ void Handler::handleRpushCommand(const std::vector<std::string>& tokens) {
     const std::string& key = tokens[0];
     std::vector<std::string> values(tokens.begin() + 1, tokens.end());
 
-    auto& list = list_store[key];
-    list.insert(list.end(), values.begin(), values.end());
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        auto& list = list_store[key];
+        list.insert(list.end(), values.begin(), values.end());
+        cv.notify_all();
+    }
 
-    sendResponse(":" + std::to_string(list.size()) + "\r\n");
+    sendResponse(":" + std::to_string(list_store[key].size()) + "\r\n");
 }   
 
 void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
@@ -176,10 +186,14 @@ void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
     std::vector<std::string> values(tokens.begin() + 1, tokens.end());
     reverse(values.begin(), values.end());
 
-    auto& list = list_store[key];
-    list.insert(list.begin(), values.begin(), values.end());
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        auto& list = list_store[key];
+        list.insert(list.end(), values.begin(), values.end());
+        cv.notify_all();
+    }
 
-    sendResponse(":" + std::to_string(list.size()) + "\r\n");
+    sendResponse(":" + std::to_string(list_store[key].size()) + "\r\n");
 }
 
 void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
@@ -231,4 +245,44 @@ void Handler::handleLpopCommand(const std::vector<std::string>&tokens){
         }
         sendResponse(response);
     }
+}
+
+void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
+    if (tokens.size() < 2) {
+        sendResponse("-Error: BLPOP requires a key and timeout\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    int timeout=std::stoi(tokens[1]);
+
+    std::unique_lock<std::mutex> lock(store_mutex);
+    auto list_has_data = [&]() {
+        return !list_store[key].empty();
+    };
+
+    if(!list_has_data()){
+        if(timeout==0){
+            cv.wait(lock, list_has_data);
+        }else{
+            if(!cv.wait_for(lock, std::chrono::seconds(timeout), list_has_data)) {
+                sendResponse("$-1\r\n");
+                return;
+            }
+        }
+    }
+
+    auto it = list_store.find(key);
+    if(it == list_store.end() || it->second.empty()) {
+        sendResponse("$-1\r\n");
+        return;
+    }
+
+    std::string value = it->second.front();
+    it->second.erase(it->second.begin());
+
+    std::string response = "*2\r\n";
+    response += "$" + std::to_string(key.size()) + "\r\n" + key + "\r\n";
+    response += "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
+    sendResponse(response);
 }
