@@ -266,7 +266,7 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
             cv.wait(lock, list_has_data);
         }else{
             if(!cv.wait_for(lock, std::chrono::duration<double>(timeout), list_has_data)) {
-                sendResponse("$-1\r\n");
+                sendResponse("*-1\r\n");
                 return;
             }
         }
@@ -274,7 +274,7 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
 
     auto it = list_store.find(key);
     if(it == list_store.end() || it->second.empty()) {
-        sendResponse("$-1\r\n");
+        sendResponse("*-1\r\n");
         return;
     }
 
