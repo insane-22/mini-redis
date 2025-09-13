@@ -189,7 +189,7 @@ void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
     {
         std::lock_guard<std::mutex> lock(store_mutex);
         auto& list = list_store[key];
-        list.insert(list.end(), values.begin(), values.end());
+        list.insert(list.begin(), values.begin(), values.end());
         cv.notify_all();
     }
 
