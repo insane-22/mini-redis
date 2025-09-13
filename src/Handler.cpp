@@ -49,6 +49,8 @@ void Handler::handleMessage(const std::string& message) {
             handleLpopCommand(cmd.args);
         } else if (cmd.name == "BLPOP"){
             handleBlpopCommand(cmd.args);
+        } else if (cmd.name == "TYPE"){
+            handleTypeCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -105,6 +107,22 @@ void Handler::handleGetCommand(const std::vector<std::string>& tokens) {
         sendResponse("$" + std::to_string(value.size()) + "\r\n" + value + "\r\n");
     } else {
         sendResponse("$-1\r\n"); 
+    }
+}
+
+void Handler::handleTypeCommand(const std::vector<std::string>&tokens){
+    if (tokens.size() < 1) {
+        sendResponse("-Error: GET requires a key\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    auto it = kv_store.find(key);
+
+    if(it != kv_store.end()){
+        sendResponse("+string\r\n");
+    }else{
+        sendResponse("+none\r\n");
     }
 }
 

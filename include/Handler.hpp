@@ -16,4 +16,5 @@ private:
     void handleLlenCommand(const std::vector<std::string>& tokens);
     void handleLpopCommand(const std::vector<std::string>& tokens);
     void handleBlpopCommand(const std::vector<std::string>& tokens);
+    void handleTypeCommand(const std::vector<std::string>& tokens);
 };
