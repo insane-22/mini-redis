@@ -32,7 +32,7 @@ void Handler::handleMessage(const std::string& message) {
             if (!cmd.args.empty()) {
                 sendResponse("$" + std::to_string(cmd.args[0].size()) + "\r\n" + cmd.args[0] + "\r\n");
             } else {
-                sendResponse("-ERR: ECHO requires an argument\r\n");
+                sendResponse("-ERR ECHO requires an argument\r\n");
             }
         } else if (cmd.name == "SET") {
             handleSetCommand(cmd.args);
@@ -55,16 +55,16 @@ void Handler::handleMessage(const std::string& message) {
         } else if (cmd.name == "XADD"){
             handleXaddCommand(cmd.args);
         } else {
-            sendResponse("-ERR: Unknown command\r\n");
+            sendResponse("-ERR Unknown command\r\n");
         }
     } catch (const std::exception& e) {
-        sendResponse("-ERR: " + std::string(e.what()) + "\r\n");
+        sendResponse("-ERR " + std::string(e.what()) + "\r\n");
     }
 }
 
 void Handler::handleSetCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 2) {
-        sendResponse("-ERR: SET requires a key and value\r\n");
+        sendResponse("-ERR SET requires a key and value\r\n");
         return;
     }
 
@@ -81,7 +81,7 @@ void Handler::handleSetCommand(const std::vector<std::string>& tokens) {
                 int64_t ms = std::stoll(tokens[3]);
                 expiry = Clock::now() + std::chrono::milliseconds(ms);
             } catch (...) {
-                sendResponse("-ERR: Invalid PX value\r\n");
+                sendResponse("-ERR Invalid PX value\r\n");
                 return;
             }
         }
@@ -93,7 +93,7 @@ void Handler::handleSetCommand(const std::vector<std::string>& tokens) {
 
 void Handler::handleGetCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 1) {
-        sendResponse("-ERR: GET requires a key\r\n");
+        sendResponse("-ERR GET requires a key\r\n");
         return;
     }
 
@@ -115,7 +115,7 @@ void Handler::handleGetCommand(const std::vector<std::string>& tokens) {
 
 void Handler::handleTypeCommand(const std::vector<std::string>&tokens){
     if (tokens.size() < 1) {
-        sendResponse("-ERR: GET requires a key\r\n");
+        sendResponse("-ERR GET requires a key\r\n");
         return;
     }
 
@@ -138,7 +138,7 @@ void Handler::sendResponse(const std::string& response) {
 
 void Handler::handleRpushCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 2) {
-        sendResponse("-ERR: RPUSH requires a key and at least one value\r\n");
+        sendResponse("-ERR RPUSH requires a key and at least one value\r\n");
         return;
     }
 
@@ -157,7 +157,7 @@ void Handler::handleRpushCommand(const std::vector<std::string>& tokens) {
 
 void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 3) {
-        sendResponse("-ERR: LRANGE requires a key, start, and stop\r\n");
+        sendResponse("-ERR LRANGE requires a key, start, and stop\r\n");
         return;
     }
 
@@ -168,7 +168,7 @@ void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
         start = std::stoi(tokens[1]);
         stop = std::stoi(tokens[2]);
     } catch (...) {
-        sendResponse("-ERR: Invalid start or stop value\r\n");
+        sendResponse("-ERR Invalid start or stop value\r\n");
         return;
     }
 
@@ -202,7 +202,7 @@ void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
 
 void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 2) {
-        sendResponse("-ERR: LPUSH requires a key and at least one value\r\n");
+        sendResponse("-ERR LPUSH requires a key and at least one value\r\n");
         return;
     }
 
@@ -222,7 +222,7 @@ void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
 
 void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
     if (tokens.size() < 1) {
-        sendResponse("-ERR: LLEN requires a key\r\n");
+        sendResponse("-ERR LLEN requires a key\r\n");
         return;
     }
 
@@ -240,7 +240,7 @@ void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
 
 void Handler::handleLpopCommand(const std::vector<std::string>&tokens){
     if(tokens.size()<1){
-        sendResponse("-ERR: LPOP requires a key\r\n");
+        sendResponse("-ERR LPOP requires a key\r\n");
         return;
     }
 
@@ -273,7 +273,7 @@ void Handler::handleLpopCommand(const std::vector<std::string>&tokens){
 
 void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
     if (tokens.size() < 2) {
-        sendResponse("-ERR: BLPOP requires a key and timeout\r\n");
+        sendResponse("-ERR BLPOP requires a key and timeout\r\n");
         return;
     }
 
@@ -313,7 +313,7 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
 
 void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
     if (tokens.size() < 3 || tokens.size() % 2 != 0) {
-        sendResponse("-ERR: XADD requires a key, ID, and field-value pairs\r\n");
+        sendResponse("-ERR XADD requires a key, ID, and field-value pairs\r\n");
         return;
     }
 
@@ -322,7 +322,7 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
 
     size_t dash = id.find('-');
     if (dash == std::string::npos) {
-        sendResponse("-ERR: Invalid ID format\r\n");
+        sendResponse("-ERR Invalid ID format\r\n");
         return;
     }
     int64_t ms = std::stoll(id.substr(0, dash));
@@ -336,12 +336,12 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
         int64_t last_seq = std::stoll(last_id_str.substr(last_dash + 1));
 
         if (ms < last_ms || (ms == last_ms && seq <= last_seq)) {
-            sendResponse("-ERR: The ID specified in XADD is equal or smaller than the target stream top item\r\n");
+            sendResponse("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n");
             return;
         }
     }else{
         if (ms == 0 && seq == 0) {
-            sendResponse("-ERR: The ID specified in XADD must be greater than 0-0");
+            sendResponse("-ERR The ID specified in XADD must be greater than 0-0");
             return;
         }
     }
