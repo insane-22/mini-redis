@@ -319,14 +319,38 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
 
     const std::string& key = tokens[0];
     const std::string& id = tokens[1];
-    std::unordered_map<std::string, std::string> fields;
 
+    size_t dash = id.find('-');
+    if (dash == std::string::npos) {
+        sendResponse("-Error: Invalid ID format\r\n");
+        return;
+    }
+    int64_t ms = std::stoll(id.substr(0, dash));
+    int64_t seq = std::stoll(id.substr(dash + 1));
+    
+    auto& stream = stream_store[key];
+    if(!stream.empty()){
+        const std::string& last_id_str = stream.back().first;
+        size_t last_dash = last_id_str.find('-');
+        int64_t last_ms = std::stoll(last_id_str.substr(0, last_dash));
+        int64_t last_seq = std::stoll(last_id_str.substr(last_dash + 1));
+
+        if (ms < last_ms || (ms == last_ms && seq <= last_seq)) {
+            sendResponse("-Error: The ID specified in XADD is equal or smaller than the target stream top item\r\n");
+            return;
+        }
+    }else{
+        if (ms == 0 && seq == 0) {
+            sendResponse("-Error: The ID specified in XADD must be greater than 0-0");
+            return;
+        }
+    }
+
+    std::unordered_map<std::string, std::string> fields;
     for (size_t i = 2; i < tokens.size(); i += 2) {
         fields[tokens[i]] = tokens[i + 1];
     }
 
-    auto& stream = stream_store[key];
     stream.push_back({id, fields});
-
     sendResponse("$" + std::to_string(id.size()) + "\r\n" + id + "\r\n");
 }
