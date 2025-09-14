@@ -15,6 +15,11 @@ struct ValueWithExpiry {
     std::optional<TimePoint> expiry;
 };
 
+int64_t getCurrentTimeMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
 Handler::Handler(int client_fd) : client_fd(client_fd) {}
 static std::unordered_map<std::string, ValueWithExpiry> kv_store;
 static std::unordered_map<std::string, std::vector<std::string>> list_store;
@@ -319,16 +324,63 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
 
     const std::string& key = tokens[0];
     const std::string& id = tokens[1];
+    std::string timePart;
+    std::string seqPart; 
 
-    size_t dash = id.find('-');
-    if (dash == std::string::npos) {
-        sendResponse("-ERR Invalid ID format\r\n");
-        return;
+    if(id=="*"){
+        timePart = "*";
+        seqPart = "*";
+    }else{
+        size_t dash = id.find('-');
+        if (dash == std::string::npos) {
+            sendResponse("-ERR Invalid ID format\r\n");
+            return;
+        }
+        timePart = id.substr(0, dash);
+        seqPart = id.substr(dash + 1);
     }
-    int64_t ms = std::stoll(id.substr(0, dash));
-    int64_t seq = std::stoll(id.substr(dash + 1));
-    
+
+    int64_t ms;
+    int64_t seq;
+
     auto& stream = stream_store[key];
+    int64_t current_ms = getCurrentTimeMs();
+
+    if(timePart == "*"){
+        ms = current_ms;
+    }else{
+        try {
+            ms = std::stoll(timePart);
+        } catch (...) {
+            sendResponse("-ERR Invalid time part\r\n");
+            return;
+        }
+    }
+
+    if(seqPart == "*"){
+        seq = 0;
+        if (!stream.empty()) {
+            const std::string& last_id_str = stream.back().first;
+            size_t last_dash = last_id_str.find('-');
+            int64_t last_ms = std::stoll(last_id_str.substr(0, last_dash));
+            int64_t last_seq = std::stoll(last_id_str.substr(last_dash + 1));
+
+            if (last_ms == ms) {
+                seq = last_seq + 1;
+            }
+        }
+        if (ms == 0) {
+            seq = 1;
+        }
+    }else{
+        try {
+            seq = std::stoll(seqPart);
+        } catch (...) {
+            sendResponse("-ERR Invalid sequence part\r\n");
+            return;
+        }
+    }
+    
     if (ms == 0 && seq == 0) {
         sendResponse("-ERR The ID specified in XADD must be greater than 0-0\r\n");
         return;
@@ -350,7 +402,7 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
     for (size_t i = 2; i < tokens.size(); i += 2) {
         fields[tokens[i]] = tokens[i + 1];
     }
-
-    stream.push_back({id, fields});
-    sendResponse("$" + std::to_string(id.size()) + "\r\n" + id + "\r\n");
+    std::string final_id = std::to_string(ms) + "-" + std::to_string(seq);
+    stream.push_back({final_id, fields});
+    sendResponse("$" + std::to_string(final_id.size()) + "\r\n" + final_id + "\r\n");
 }
