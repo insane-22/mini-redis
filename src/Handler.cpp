@@ -329,6 +329,11 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
     int64_t seq = std::stoll(id.substr(dash + 1));
     
     auto& stream = stream_store[key];
+    if (ms == 0 && seq == 0) {
+        sendResponse("-ERR The ID specified in XADD must be greater than 0-0\r\n");
+        return;
+    }
+
     if(!stream.empty()){
         const std::string& last_id_str = stream.back().first;
         size_t last_dash = last_id_str.find('-');
@@ -337,11 +342,6 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
 
         if (ms < last_ms || (ms == last_ms && seq <= last_seq)) {
             sendResponse("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n");
-            return;
-        }
-    }else{
-        if (ms == 0 && seq == 0) {
-            sendResponse("-ERR The ID specified in XADD must be greater than 0-0");
             return;
         }
     }
