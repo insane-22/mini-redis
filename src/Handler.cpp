@@ -18,6 +18,7 @@ struct ValueWithExpiry {
 Handler::Handler(int client_fd) : client_fd(client_fd) {}
 static std::unordered_map<std::string, ValueWithExpiry> kv_store;
 static std::unordered_map<std::string, std::vector<std::string>> list_store;
+static std::unordered_map<std::string, std::vector<std::pair<std::string, std::unordered_map<std::string, std::string>>>> stream_store;
 static std::mutex store_mutex;
 static std::condition_variable cv;
 
@@ -51,6 +52,8 @@ void Handler::handleMessage(const std::string& message) {
             handleBlpopCommand(cmd.args);
         } else if (cmd.name == "TYPE"){
             handleTypeCommand(cmd.args);
+        } else if (cmd.name == "XADD"){
+            handleXaddCommand(cmd.args);
         } else {
             sendResponse("-Error: Unknown command\r\n");
         }
@@ -118,9 +121,12 @@ void Handler::handleTypeCommand(const std::vector<std::string>&tokens){
 
     const std::string& key = tokens[0];
     auto it = kv_store.find(key);
+    auto it2 = stream_store.find(key);
 
     if(it != kv_store.end()){
         sendResponse("+string\r\n");
+    }else if(it2 !=  stream_store.end()){
+        sendResponse("+stream\r\n");
     }else{
         sendResponse("+none\r\n");
     }
@@ -303,4 +309,24 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
     response += "$" + std::to_string(key.size()) + "\r\n" + key + "\r\n";
     response += "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
     sendResponse(response);
+}
+
+void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3 || tokens.size() % 2 != 0) {
+        sendResponse("-Error: XADD requires a key, ID, and field-value pairs\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    const std::string& id = tokens[1];
+    std::unordered_map<std::string, std::string> fields;
+
+    for (size_t i = 2; i < tokens.size(); i += 2) {
+        fields[tokens[i]] = tokens[i + 1];
+    }
+
+    auto& stream = stream_store[key];
+    stream.push_back({id, fields});
+
+    sendResponse("$" + std::to_string(id.size()) + "\r\n" + id + "\r\n");
 }
