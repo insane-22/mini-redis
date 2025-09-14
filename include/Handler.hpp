@@ -18,4 +18,5 @@ private:
     void handleBlpopCommand(const std::vector<std::string>& tokens);
     void handleTypeCommand(const std::vector<std::string>& tokens);
     void handleXaddCommand(const std::vector<std::string>& tokens);
+    void handleXrangeCommand(const std::vector<std::string>& tokens);
 };

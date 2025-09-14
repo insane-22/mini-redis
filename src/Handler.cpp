@@ -59,6 +59,8 @@ void Handler::handleMessage(const std::string& message) {
             handleTypeCommand(cmd.args);
         } else if (cmd.name == "XADD"){
             handleXaddCommand(cmd.args);
+        } else if (cmd.name == "XRANGE"){
+            handleXrangeCommand(cmd.args);
         } else {
             sendResponse("-ERR Unknown command\r\n");
         }
@@ -405,4 +407,73 @@ void Handler::handleXaddCommand(const std::vector<std::string>& tokens) {
     std::string final_id = std::to_string(ms) + "-" + std::to_string(seq);
     stream.push_back({final_id, fields});
     sendResponse("$" + std::to_string(final_id.size()) + "\r\n" + final_id + "\r\n");
+}
+
+void Handler::handleXrangeCommand(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3) {
+        sendResponse("-ERR XRANGE requires a key, start, and end\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+    std::string start_id = tokens[1];
+    std::string end_id = tokens[2];
+
+    auto it = stream_store.find(key);
+    if (it == stream_store.end() || it->second.empty()) {
+        sendResponse("*0\r\n");
+        return;
+    }
+
+    auto& stream = it->second;
+
+    auto parse_id = [](const std::string& id, int64_t& ms, int64_t& seq, bool is_start) {
+        size_t dash = id.find('-');
+        if (dash == std::string::npos) {
+            ms = std::stoll(id);
+            seq = is_start ? 0 : INT64_MAX;
+        } else {
+            ms = std::stoll(id.substr(0, dash));
+            seq = std::stoll(id.substr(dash + 1));
+        }
+    };
+
+    int64_t start_ms, start_seq, end_ms, end_seq;
+    try {
+        parse_id(start_id, start_ms, start_seq, true);
+        parse_id(end_id, end_ms, end_seq, false);
+    } catch (...) {
+        sendResponse("-ERR Invalid start or end ID\r\n");
+        return;
+    }
+
+    std::vector<std::pair<std::string, std::unordered_map<std::string, std::string>>> result;
+    for (auto& entry : stream) {
+        const std::string& entry_id = entry.first;
+        size_t dash = entry_id.find('-');
+        int64_t ms = std::stoll(entry_id.substr(0, dash));
+        int64_t seq = std::stoll(entry_id.substr(dash + 1));
+
+        if ((ms > start_ms || (ms == start_ms && seq >= start_seq)) &&
+            (ms < end_ms || (ms == end_ms && seq <= end_seq))) {
+            result.push_back(entry);
+        }
+    }
+
+    std::string response = "*" + std::to_string(result.size()) + "\r\n";
+    for (auto& entry : result) {
+        const std::string& id = entry.first;
+        auto& fields = entry.second;
+
+        response += "*2\r\n";
+        response += "$" + std::to_string(id.size()) + "\r\n" + id + "\r\n";
+
+        response += "*" + std::to_string(fields.size() * 2) + "\r\n";
+        for (auto& kv : fields) {
+            response += "$" + std::to_string(kv.first.size()) + "\r\n" + kv.first + "\r\n";
+            response += "$" + std::to_string(kv.second.size()) + "\r\n" + kv.second + "\r\n";
+        }
+    }
+
+    sendResponse(response);
 }
