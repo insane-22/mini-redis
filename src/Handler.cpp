@@ -151,15 +151,17 @@ void Handler::handleRpushCommand(const std::vector<std::string>& tokens) {
 
     const std::string& key = tokens[0];
     std::vector<std::string> values(tokens.begin() + 1, tokens.end());
+    size_t new_size;
 
     {
         std::lock_guard<std::mutex> lock(store_mutex);
         auto& list = list_store[key];
         list.insert(list.end(), values.begin(), values.end());
+        new_size = list.size();
         cv.notify_all();
     }
 
-    sendResponse(":" + std::to_string(list_store[key].size()) + "\r\n");
+    sendResponse(":" + std::to_string(new_size) + "\r\n");
 }   
 
 void Handler::handleLrangeCommand(const std::vector<std::string>& tokens) {
@@ -216,15 +218,17 @@ void Handler::handleLpushCommand(const std::vector<std::string>& tokens) {
     const std::string& key = tokens[0];
     std::vector<std::string> values(tokens.begin() + 1, tokens.end());
     reverse(values.begin(), values.end());
+    size_t new_size;
 
     {
         std::lock_guard<std::mutex> lock(store_mutex);
         auto& list = list_store[key];
         list.insert(list.begin(), values.begin(), values.end());
+        new_size = list.size();
         cv.notify_all();
     }
 
-    sendResponse(":" + std::to_string(list_store[key].size()) + "\r\n");
+    sendResponse(":" + std::to_string(new_size) + "\r\n");
 }
 
 void Handler::handleLlenCommand(const std::vector<std::string>&tokens){
@@ -289,7 +293,8 @@ void Handler::handleBlpopCommand(const std::vector<std::string>&tokens){
 
     std::unique_lock<std::mutex> lock(store_mutex);
     auto list_has_data = [&]() {
-        return !list_store[key].empty();
+        auto it = list_store.find(key);
+        return it != list_store.end() && !it->second.empty();
     };
 
     if(!list_has_data()){
