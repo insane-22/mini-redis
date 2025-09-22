@@ -445,8 +445,18 @@ void Handler::handleXrangeCommand(const std::vector<std::string>& tokens) {
 
     int64_t start_ms, start_seq, end_ms, end_seq;
     try {
-        parse_id(start_id, start_ms, start_seq, true);
-        parse_id(end_id, end_ms, end_seq, false);
+        if(start_id == "-"){
+            start_ms = 0;
+            start_seq = 0;
+        }else{
+            parse_id(start_id, start_ms, start_seq, true);
+        }
+        if(end_id == "+"){
+            end_ms = INT64_MAX;
+            end_seq = INT64_MAX;
+        }else{
+            parse_id(end_id, end_ms, end_seq, false);
+        }
     } catch (...) {
         sendResponse("-ERR Invalid start or end ID\r\n");
         return;
