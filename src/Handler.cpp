@@ -61,6 +61,8 @@ void Handler::handleMessage(const std::string& message) {
             handleXaddCommand(cmd.args);
         } else if (cmd.name == "XRANGE"){
             handleXrangeCommand(cmd.args);
+        } else if (cmd.name == "XREAD"){
+            handleXreadCommand(cmd.args);
         } else {
             sendResponse("-ERR Unknown command\r\n");
         }
@@ -487,6 +489,80 @@ void Handler::handleXrangeCommand(const std::vector<std::string>& tokens) {
         for (auto& kv : fields) {
             response += "$" + std::to_string(kv.first.size()) + "\r\n" + kv.first + "\r\n";
             response += "$" + std::to_string(kv.second.size()) + "\r\n" + kv.second + "\r\n";
+        }
+    }
+
+    sendResponse(response);
+}
+
+void Handler::handleXreadCommand(const std::vector<std::string>& tokens) {
+    if (tokens.size() < 3 || tokens[0] != "streams") {
+        sendResponse("-ERR XREAD syntax error\r\n");
+        return;
+    }
+
+    size_t mid = (tokens.size() - 1) / 2 + 1;
+    std::vector<std::string> keys(tokens.begin() + 1, tokens.begin() + mid);
+    std::vector<std::string> ids(tokens.begin() + mid, tokens.end());
+
+    if (keys.size() != ids.size()) {
+        sendResponse("-ERR Number of keys and IDs must match\r\n");
+        return;
+    }
+
+    std::string response = "*" + std::to_string(keys.size()) + "\r\n";
+
+    for (size_t i = 0; i < keys.size(); i++) {
+        const std::string& key = keys[i];
+        const std::string& last_id = ids[i];
+
+        auto it = stream_store.find(key);
+        if (it == stream_store.end() || it->second.empty()) {
+            continue;
+        }
+
+        auto& stream = it->second;
+
+        int64_t last_ms = 0, last_seq = -1;
+        size_t dash = last_id.find('-');
+        if (dash != std::string::npos) {
+            last_ms = std::stoll(last_id.substr(0, dash));
+            last_seq = std::stoll(last_id.substr(dash + 1));
+        } else {
+            last_ms = std::stoll(last_id);
+            last_seq = -1; 
+        }
+
+        std::vector<std::pair<std::string, std::unordered_map<std::string, std::string>>> results;
+        for (auto& entry : stream) {
+            const std::string& entry_id = entry.first;
+            size_t e_dash = entry_id.find('-');
+            int64_t ms = std::stoll(entry_id.substr(0, e_dash));
+            int64_t seq = std::stoll(entry_id.substr(e_dash + 1));
+
+            if ((ms > last_ms) || (ms == last_ms && seq > last_seq)) {
+                results.push_back(entry);
+            }
+        }
+
+        if (!results.empty()) {
+            response += "*2\r\n";
+            response += "$" + std::to_string(key.size()) + "\r\n" + key + "\r\n";
+
+            response += "*" + std::to_string(results.size()) + "\r\n";
+            for (auto& entry : results) {
+                const std::string& id = entry.first;
+                auto& fields = entry.second;
+
+                response += "*2\r\n";
+                response += "$" + std::to_string(id.size()) + "\r\n" + id + "\r\n";
+
+                response += "*" + std::to_string(fields.size() * 2) + "\r\n";
+                for (auto& kv : fields) {
+                    response += "$" + std::to_string(kv.first.size()) + "\r\n" + kv.first + "\r\n";
+                    response += "$" + std::to_string(kv.second.size()) + "\r\n" + kv.second + "\r\n";
+                }
+            }
         }
     }
 

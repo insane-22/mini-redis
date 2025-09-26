@@ -19,4 +19,5 @@ private:
     void handleTypeCommand(const std::vector<std::string>& tokens);
     void handleXaddCommand(const std::vector<std::string>& tokens);
     void handleXrangeCommand(const std::vector<std::string>& tokens);
+    void handleXreadCommand(const std::vector<std::string>& tokens);
 };
