@@ -145,7 +145,7 @@ void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
     size_t idx = 0;
 
     while(idx < tokens.size() && tokens[idx] != "streams") {
-        if(tokens[idx] == "BLOCK" && idx + 1 < tokens.size()) {
+        if((tokens[idx] == "BLOCK" || tokens[idx] == "block") && idx + 1 < tokens.size()) {
             try {
                 block_ms = std::stoll(tokens[idx + 1]);
             } catch (...) { sendResponse("-ERR invalid BLOCK value\r\n"); return; }
