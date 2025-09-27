@@ -194,7 +194,7 @@ void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
         }
 
         if(results.empty()) {
-            response = "$-1\r\n"; // Nil bulk string if no new entries
+            response = "*-1\r\n"; 
             continue;
         }
 
