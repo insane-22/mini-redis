@@ -74,7 +74,7 @@ void StreamStoreHandler::handleXadd(const std::vector<std::string>& tokens) {
             int64_t last_ms = std::stoll(stream.back().first.substr(0, last_dash));
             int64_t last_seq = std::stoll(stream.back().first.substr(last_dash + 1));
             if (ms < last_ms || (ms == last_ms && seq <= last_seq)) {
-                sendResponse("-ERR The ID specified in XADD is equal or smaller than the target stream top item");
+                sendResponse("-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n");
                 return;
             }
         }
