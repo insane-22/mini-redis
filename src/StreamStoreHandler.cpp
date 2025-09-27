@@ -67,7 +67,7 @@ void StreamStoreHandler::handleXadd(const std::vector<std::string>& tokens) {
             if (ms == 0) seq = 1;
         } else seq = std::stoll(seqPart);
 
-        if (ms == 0 && seq == 0) { sendResponse("-ERR The ID must be greater than 0-0\r\n"); return; }
+        if (ms == 0 && seq == 0) { sendResponse("-ERR The ID specified in XADD must be greater than 0-0\r\n"); return; }
 
         if (!stream.empty()) {
             size_t last_dash = stream.back().first.find('-');
