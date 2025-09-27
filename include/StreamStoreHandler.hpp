@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <mutex>
+#include <condition_variable>
 
 class StreamStoreHandler {
 public:
@@ -24,4 +25,6 @@ private:
     using StreamEntry = std::pair<std::string, std::unordered_map<std::string, std::string>>;
     static std::unordered_map<std::string, std::vector<StreamEntry>> stream_store;
     static std::mutex store_mutex;
+    static std::unordered_map<std::string, std::condition_variable> stream_cvs;
+
 };

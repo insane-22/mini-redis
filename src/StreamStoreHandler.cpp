@@ -3,10 +3,11 @@
 #include <sstream>
 #include <algorithm>
 #include <chrono>
-#include <sys/socket.h>
+#include <sys/socket.h> 
 
 std::unordered_map<std::string, std::vector<StreamStoreHandler::StreamEntry>> StreamStoreHandler::stream_store;
 std::mutex StreamStoreHandler::store_mutex;
+std::unordered_map<std::string, std::condition_variable>StreamStoreHandler::stream_cvs;
 
 StreamStoreHandler::StreamStoreHandler(int client_fd) : client_fd(client_fd) {}
 
@@ -78,6 +79,7 @@ void StreamStoreHandler::handleXadd(const std::vector<std::string>& tokens) {
 
     std::string final_id = std::to_string(ms) + "-" + std::to_string(seq);
     stream.push_back({final_id, fields});
+    stream_cvs[key].notify_all();
     sendResponse("$" + std::to_string(final_id.size()) + "\r\n" + final_id + "\r\n");
 }
 
@@ -125,48 +127,86 @@ void StreamStoreHandler::handleXrange(const std::vector<std::string>& tokens) {
 }
 
 void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
-    if(tokens.size() < 3 || tokens[0] != "streams") { sendResponse("-ERR XREAD syntax error\r\n"); return; }
+    if(tokens.size() < 3) { sendResponse("-ERR XREAD syntax error\r\n"); return; }
 
-    size_t mid = (tokens.size() - 1)/2 + 1;
-    std::vector<std::string> keys(tokens.begin()+1, tokens.begin()+mid);
+    int64_t block_ms = 0;
+    size_t idx = 0;
+
+    while(idx < tokens.size() && tokens[idx] != "streams") {
+        if(tokens[idx] == "BLOCK" && idx + 1 < tokens.size()) {
+            block_ms = std::stoll(tokens[idx + 1]);
+            idx += 2;
+        } else {
+            idx++;
+        }
+    }
+
+    if(idx >= tokens.size() || tokens[idx] != "streams") {
+        sendResponse("-ERR XREAD syntax error\r\n"); 
+        return;
+    }
+    idx++; 
+
+    size_t mid = (tokens.size() - idx)/2 + idx;
+    std::vector<std::string> keys(tokens.begin()+idx, tokens.begin()+mid);
     std::vector<std::string> ids(tokens.begin()+mid, tokens.end());
 
     if(keys.size() != ids.size()) { sendResponse("-ERR Number of keys and IDs must match\r\n"); return; }
 
     std::string response = "*" + std::to_string(keys.size()) + "\r\n";
-    std::lock_guard<std::mutex> lock(store_mutex);
 
-    for(size_t i=0;i<keys.size();i++) {
+    std::unique_lock<std::mutex> lock(store_mutex);
+
+    for(size_t i = 0; i < keys.size(); i++) {
         const std::string& key = keys[i];
         const std::string& last_id = ids[i];
 
         auto it = stream_store.find(key);
-        if(it == stream_store.end() || it->second.empty()) continue;
-        auto& stream = it->second;
+        if(it == stream_store.end()) stream_store[key] = {}; 
+        auto& stream = stream_store[key];
 
         int64_t last_ms = 0, last_seq = -1;
         size_t dash = last_id.find('-');
-        if(dash != std::string::npos) { last_ms = std::stoll(last_id.substr(0,dash)); last_seq = std::stoll(last_id.substr(dash+1)); }
-        else { last_ms = std::stoll(last_id); last_seq = -1; }
+        if(dash != std::string::npos) { 
+            last_ms = std::stoll(last_id.substr(0,dash)); 
+            last_seq = std::stoll(last_id.substr(dash+1)); 
+        } else { 
+            last_ms = std::stoll(last_id); 
+            last_seq = -1; 
+        }
+
+        if(block_ms > 0) {
+            stream_cvs[key].wait_for(lock, std::chrono::milliseconds(block_ms), [&]() {
+                if(stream.empty()) return false;
+                size_t last_idx = stream.back().first.find('-');
+                int64_t ms = std::stoll(stream.back().first.substr(0, last_idx));
+                int64_t seq = std::stoll(stream.back().first.substr(last_idx+1));
+                return (ms > last_ms) || (ms == last_ms && seq > last_seq);
+            });
+        }
 
         std::vector<std::pair<std::string,std::unordered_map<std::string,std::string>>> results;
         for(auto& entry : stream) {
             size_t e_dash = entry.first.find('-');
             int64_t ms = std::stoll(entry.first.substr(0,e_dash));
             int64_t seq = std::stoll(entry.first.substr(e_dash+1));
-            if((ms>last_ms) || (ms==last_ms && seq>last_seq)) results.push_back(entry);
+            if((ms > last_ms) || (ms == last_ms && seq > last_seq)) results.push_back(entry);
         }
 
-        if(!results.empty()) {
-            response += "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n";
-            response += "*" + std::to_string(results.size()) + "\r\n";
-            for(auto& entry : results){
-                response += "*2\r\n$" + std::to_string(entry.first.size()) + "\r\n" + entry.first + "\r\n";
-                response += "*" + std::to_string(entry.second.size()*2) + "\r\n";
-                for(auto& kv : entry.second){
-                    response += "$" + std::to_string(kv.first.size()) + "\r\n" + kv.first + "\r\n";
-                    response += "$" + std::to_string(kv.second.size()) + "\r\n" + kv.second + "\r\n";
-                }
+        if(results.empty()) {
+            response = "$-1\r\n"; // Nil bulk string if no new entries
+            continue;
+        }
+
+        response += "*2\r\n$" + std::to_string(key.size()) + "\r\n" + key + "\r\n";
+        response += "*" + std::to_string(results.size()) + "\r\n";
+
+        for(auto& entry : results){
+            response += "*2\r\n$" + std::to_string(entry.first.size()) + "\r\n" + entry.first + "\r\n";
+            response += "*" + std::to_string(entry.second.size()*2) + "\r\n";
+            for(auto& kv : entry.second){
+                response += "$" + std::to_string(kv.first.size()) + "\r\n" + kv.first + "\r\n";
+                response += "$" + std::to_string(kv.second.size()) + "\r\n" + kv.second + "\r\n";
             }
         }
     }
