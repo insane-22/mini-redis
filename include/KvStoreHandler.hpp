@@ -17,12 +17,13 @@ public:
 
     bool isKvCommand(const std::string& cmd);
     void handleCommand(const std::string& cmd, const std::vector<std::string>& args);
+    bool hasKey(const std::string& key);
+    std::string typeName() const { return "string"; }
 
 private:
     int client_fd;
     void handleSet(const std::vector<std::string>& args);
     void handleGet(const std::vector<std::string>& args);
-    void handleType(const std::vector<std::string>& args);
 
     void sendResponse(const std::string& response);
 

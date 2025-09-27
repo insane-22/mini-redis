@@ -11,6 +11,8 @@ public:
 
     bool isListCommand(const std::string& cmd);
     void handleCommand(const std::string& cmd, const std::vector<std::string>& args);
+    bool hasKey(const std::string& key);
+    std::string typeName() const { return "list"; }
 
 private:
     int client_fd;

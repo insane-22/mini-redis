@@ -20,6 +20,8 @@ void Handler::handleMessage(const std::string& message) {
                 sendResponse("$" + std::to_string(cmd.args[0].size()) + "\r\n" + cmd.args[0] + "\r\n");
             else
                 sendResponse("-ERR ECHO requires an argument\r\n");
+        } else if (name == "TYPE") {
+            handleTypeCommand(cmd.args);
         } else if (kvHandler.isKvCommand(name)) {
             kvHandler.handleCommand(name, cmd.args);
         } else if (listHandler.isListCommand(name)) {
@@ -31,6 +33,25 @@ void Handler::handleMessage(const std::string& message) {
         }
     } catch (const std::exception& e) {
         sendResponse("-ERR " + std::string(e.what()) + "\r\n");
+    }
+}
+
+void Handler::handleTypeCommand(const std::vector<std::string>& args) {
+    if (args.empty()) {
+        sendResponse("-ERR TYPE requires a key\r\n");
+        return;
+    }
+
+    const std::string& key = args[0];
+
+    if (kvHandler.hasKey(key)) {
+        sendResponse("+" + kvHandler.typeName() + "\r\n");
+    } else if (listHandler.hasKey(key)) {
+        sendResponse("+" + listHandler.typeName() + "\r\n");
+    } else if (streamHandler.hasKey(key)) {
+        sendResponse("+" + streamHandler.typeName() + "\r\n");
+    } else {
+        sendResponse("+none\r\n");
     }
 }
 

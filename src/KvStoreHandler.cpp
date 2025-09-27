@@ -11,13 +11,12 @@ std::mutex KvStoreHandler::store_mutex;
 KvStoreHandler::KvStoreHandler(int client_fd) : client_fd(client_fd) {}
 
 bool KvStoreHandler::isKvCommand(const std::string& cmd) {
-    return cmd == "SET" || cmd == "GET" || cmd == "TYPE";
+    return cmd == "SET" || cmd == "GET";
 }
 
 void KvStoreHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd == "SET") handleSet(args);
     else if (cmd == "GET") handleGet(args);
-    else if (cmd == "TYPE") handleType(args);
 }
 
 int64_t getCurrentTimeMs() {
@@ -76,18 +75,17 @@ void KvStoreHandler::handleGet(const std::vector<std::string>& tokens) {
     }
 }
 
-void KvStoreHandler::handleType(const std::vector<std::string>& tokens) {
-    if (tokens.empty()) {
-        sendResponse("-ERR TYPE requires a key\r\n");
-        return;
-    }
-
-    const std::string& key = tokens[0];
+bool KvStoreHandler::hasKey(const std::string& key) {
     std::lock_guard<std::mutex> lock(store_mutex);
-    if (kv_store.find(key) != kv_store.end())
-        sendResponse("+string\r\n");
-    else
-        sendResponse("+none\r\n");
+    auto it = kv_store.find(key);
+    if (it != kv_store.end()) {
+        if (it->second.expiry && Clock::now() >= it->second.expiry.value()) {
+            kv_store.erase(it);
+            return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 void KvStoreHandler::sendResponse(const std::string& response) {

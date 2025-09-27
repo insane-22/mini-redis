@@ -8,6 +8,9 @@
 
 class Handler {
     int client_fd;
+    KvStoreHandler kvHandler;
+    ListStoreHandler listHandler;
+    StreamStoreHandler streamHandler;
 
 public:
     explicit Handler(int client_fd);
@@ -15,8 +18,6 @@ public:
 
 private:
     void sendResponse(const std::string& response);
+    void handleTypeCommand(const std::vector<std::string>& args);
 
-    KvStoreHandler kvHandler;
-    ListStoreHandler listHandler;
-    StreamStoreHandler streamHandler;
 };

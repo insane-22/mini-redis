@@ -263,6 +263,15 @@ void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
     sendResponse(response);
 }
 
+bool StreamStoreHandler::hasKey(const std::string& key) {
+    std::lock_guard<std::mutex> lock(store_mutex);
+    auto it = stream_store.find(key);
+    if (it != stream_store.end()) {
+        return true;
+    }
+    return false;
+}
+
 void StreamStoreHandler::sendResponse(const std::string& response) {
     send(client_fd, response.c_str(), response.size(), 0);
 }

@@ -202,6 +202,15 @@ void ListStoreHandler::handleBlpop(const std::vector<std::string>& tokens) {
     sendResponse(response);
 }
 
+bool ListStoreHandler::hasKey(const std::string& key) {
+    std::lock_guard<std::mutex> lock(store_mutex);
+    auto it = list_store.find(key);
+    if (it != list_store.end()) {
+        return true;
+    }
+    return false;
+}
+
 void ListStoreHandler::sendResponse(const std::string& response) {
     send(client_fd, response.c_str(), response.size(), 0);
 }
