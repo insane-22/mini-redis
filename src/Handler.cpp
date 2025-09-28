@@ -1,8 +1,9 @@
 #include "Handler.hpp"
 #include <sys/socket.h>
 
-Handler::Handler(int client_fd)
+Handler::Handler(int client_fd, bool replica)
     : client_fd(client_fd),
+      isReplica(replica),
       kvHandler(client_fd),
       listHandler(client_fd),
       streamHandler(client_fd) {}
@@ -67,6 +68,12 @@ void Handler::handleMessage(const std::string& message) {
                 } else if (streamHandler.isStreamCommand(name)) {
                     streamHandler.handleCommand(name, cmd.args);
                 }
+            }
+        } else if (name == "INFO" || name == "info") {
+            if (cmd.args.size() == 1 && cmd.args[0] == "replication") {
+                std::string info = isReplica ? "role:slave" : "role:master";
+                std::string response = "$" + std::to_string(info.size()) + "\r\n" + info + "\r\n";
+                sendResponse(response);
             }
         } else {
             sendResponse("-ERR Unknown command\r\n");

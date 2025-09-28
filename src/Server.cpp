@@ -11,8 +11,8 @@
 #include <vector>
 #include "Handler.hpp"
 
-void handleResponse(int client_fd) {
-  Handler handler(client_fd);
+void handleResponse(int client_fd, bool isReplica) {
+  Handler handler(client_fd, isReplica);
 
   char buffer[1024];
   while(true){
@@ -34,11 +34,18 @@ int main(int argc, char **argv) {
   std::cerr << std::unitbuf;
 
   int port = 6379;
+  bool isReplica = false;
+  std::string masterHost;
+  int masterPort = 0;
   for(int i=1;i<argc;i++){
     std::string arg=argv[i];
     if (arg=="--port" && i + 1 < argc) {
       port = std::stoi(argv[i + 1]);
       i++;
+    } else if (arg=="--replicaof" && i+2<argc) {
+      isReplica=true;
+      masterHost=argv[++i];
+      masterPort=std::stoi(argv[++i]);
     }
   }
 
@@ -79,7 +86,7 @@ int main(int argc, char **argv) {
     int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, (socklen_t *) &client_addr_len);
     std::cout << "Client connected\n";
 
-    std::thread clients(handleResponse, client_fd);
+    std::thread clients(handleResponse, client_fd, isReplica);
     clients.detach();
   }
 

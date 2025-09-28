@@ -8,6 +8,7 @@
 
 class Handler {
     int client_fd;
+    bool isReplica;
     KvStoreHandler kvHandler;
     ListStoreHandler listHandler;
     StreamStoreHandler streamHandler;
@@ -16,7 +17,7 @@ class Handler {
     std::vector<std::pair<std::string, std::vector<std::string>>> queued_commands;
 
 public:
-    explicit Handler(int client_fd);
+    explicit Handler(int fd, bool replica = false);
     void handleMessage(const std::string& message);
 
 private:
