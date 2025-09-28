@@ -12,6 +12,9 @@ class Handler {
     ListStoreHandler listHandler;
     StreamStoreHandler streamHandler;
 
+    bool in_transaction = false;
+    std::vector<std::pair<std::string, std::vector<std::string>>> queued_commands;
+
 public:
     explicit Handler(int client_fd);
     void handleMessage(const std::string& message);
@@ -19,5 +22,5 @@ public:
 private:
     void sendResponse(const std::string& response);
     void handleTypeCommand(const std::vector<std::string>& args);
-
+    void executeQueuedCommand(const std::string& cmd, const std::vector<std::string>& args);
 };
