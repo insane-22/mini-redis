@@ -71,7 +71,15 @@ void Handler::handleMessage(const std::string& message) {
             }
         } else if (name == "INFO" || name == "info") {
             if (cmd.args.size() == 1 && cmd.args[0] == "replication") {
-                std::string info = isReplica ? "role:slave" : "role:master";
+                std::string info;
+                if (!isReplica) {
+                    std::string replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"; 
+                    info  = "role:master\r\n";
+                    info += "master_replid:" + replid + "\r\n";
+                    info += "master_repl_offset:0";
+                } else {
+                    info = "role:slave";
+                }
                 std::string response = "$" + std::to_string(info.size()) + "\r\n" + info + "\r\n";
                 sendResponse(response);
             }

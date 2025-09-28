@@ -42,10 +42,20 @@ int main(int argc, char **argv) {
     if (arg=="--port" && i + 1 < argc) {
       port = std::stoi(argv[i + 1]);
       i++;
-    } else if (arg=="--replicaof" && i+2<argc) {
-      isReplica=true;
-      masterHost=argv[++i];
-      masterPort=std::stoi(argv[++i]);
+    } else if (arg=="--replicaof" && i+1<argc) {
+      isReplica = true;
+      std::string hostPort = argv[++i];
+      size_t pos = hostPort.find(' ');
+      if (pos != std::string::npos) {
+        masterHost = hostPort.substr(0, pos);
+        masterPort = std::stoi(hostPort.substr(pos+1));
+      } else if (i+1 < argc) {
+        masterHost = hostPort;
+        masterPort = std::stoi(argv[++i]);
+      } else {
+        std::cerr << "--replicaof requires host and port\n";
+        return 1;
+      }
     }
   }
 
