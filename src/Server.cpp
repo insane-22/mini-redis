@@ -13,7 +13,7 @@
 
 void handleResponse(int client_fd) {
   Handler handler(client_fd);
-  
+
   char buffer[1024];
   while(true){
     memset(buffer, 0, sizeof(buffer));
@@ -32,34 +32,45 @@ void handleResponse(int client_fd) {
 int main(int argc, char **argv) {
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
-  
+
+  int port = 6379;
+  for(int i=1;i<argc;i++){
+    std::string arg=argv[i];
+    if (arg=="--port" && i + 1 < argc) {
+      port = std::stoi(argv[i + 1]);
+      i++;
+    }
+  }
+
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
    std::cerr << "Failed to create server socket\n";
    return 1;
   }
-  
+
   int reuse = 1;
-  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {    std::cerr << "setsockopt failed\n";
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+    std::cerr << "setsockopt failed\n";
     return 1;
   }
-  
+
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(6379);
+  server_addr.sin_port = htons(port);
   
   if (bind(server_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) != 0) {
-    std::cerr << "Failed to bind to port 6379\n";
+    std::cerr << "Failed to bind to port "<<port<<"\n";
     return 1;
   }
-  
+
   int connection_backlog = 5;
   if (listen(server_fd, connection_backlog) != 0) {
     std::cerr << "listen failed\n";
     return 1;
   }
-  
+
+  std::cout << "Server listening on port " << port << "\n";
   struct sockaddr_in client_addr;
   int client_addr_len = sizeof(client_addr);
 
