@@ -180,13 +180,26 @@ void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
     std::vector<int64_t> last_ms(keys.size(), 0), last_seq(keys.size(), -1);
     for (size_t i = 0; i < ids.size(); ++i) {
         const std::string &last_id = ids[i];
-        size_t dash = last_id.find('-');
-        if (dash != std::string::npos) {
-            last_ms[i] = std::stoll(last_id.substr(0, dash));
-            last_seq[i] = std::stoll(last_id.substr(dash + 1));
+        if (last_id == "$") {
+            auto it = stream_store.find(keys[i]);
+            if (it != stream_store.end() && !it->second.empty()) {
+                const auto &last_entry = it->second.back().first;
+                size_t dash = last_entry.find('-');
+                last_ms[i] = std::stoll(last_entry.substr(0, dash));
+                last_seq[i] = std::stoll(last_entry.substr(dash + 1));
+            } else {
+                last_ms[i] = 0;
+                last_seq[i] = 0;
+            }
         } else {
-            last_ms[i] = std::stoll(last_id);
-            last_seq[i] = -1;
+            size_t dash = last_id.find('-');
+            if (dash != std::string::npos) {
+                last_ms[i] = std::stoll(last_id.substr(0, dash));
+                last_seq[i] = std::stoll(last_id.substr(dash + 1));
+            } else {
+                last_ms[i] = std::stoll(last_id);
+                last_seq[i] = -1;
+            }
         }
     }
 
@@ -225,6 +238,22 @@ void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
             }
             return false;
         });
+        all_results = collect();
+
+    } else if (block_ms == 0) {
+        global_cv.wait(lock, [&]() -> bool {
+            for (size_t i = 0; i < keys.size(); ++i) {
+                auto it = stream_store.find(keys[i]);
+                if (it == stream_store.end()) continue;
+                auto &stream = it->second;
+                if (stream.empty()) continue;
+                size_t e_dash = stream.back().first.find('-');
+                int64_t ms = std::stoll(stream.back().first.substr(0, e_dash));
+                int64_t seq = std::stoll(stream.back().first.substr(e_dash + 1));
+                if ((ms > last_ms[i]) || (ms == last_ms[i] && seq > last_seq[i])) return true;
+            }
+            return false;
+        });
 
         all_results = collect();
     }
@@ -235,12 +264,12 @@ void StreamStoreHandler::handleXread(const std::vector<std::string>& tokens) {
         if (results.empty()) continue;
 
         std::string part;
-        part += "*2\r\n"; // [key, entries]
+        part += "*2\r\n"; 
         part += "$" + std::to_string(keys[i].size()) + "\r\n" + keys[i] + "\r\n";
         part += "*" + std::to_string(results.size()) + "\r\n";
 
         for (auto &entry : results) {
-            part += "*2\r\n"; // [id, fields]
+            part += "*2\r\n"; 
             part += "$" + std::to_string(entry.first.size()) + "\r\n" + entry.first + "\r\n";
             part += "*" + std::to_string(entry.second.size() * 2) + "\r\n";
             for (auto &kv : entry.second) {
