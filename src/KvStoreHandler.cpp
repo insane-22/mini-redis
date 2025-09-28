@@ -11,12 +11,13 @@ std::mutex KvStoreHandler::store_mutex;
 KvStoreHandler::KvStoreHandler(int client_fd) : client_fd(client_fd) {}
 
 bool KvStoreHandler::isKvCommand(const std::string& cmd) {
-    return cmd == "SET" || cmd == "GET";
+    return cmd == "SET" || cmd == "GET" || cmd == "INCR";
 }
 
 void KvStoreHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd == "SET") handleSet(args);
     else if (cmd == "GET") handleGet(args);
+    else if (cmd == "INCR") handleIncr(args);
 }
 
 int64_t getCurrentTimeMs() {
@@ -86,6 +87,37 @@ bool KvStoreHandler::hasKey(const std::string& key) {
         return true;
     }
     return false;
+}
+
+void KvStoreHandler::handleIncr(const std::vector<std::string>& tokens) {
+    if (tokens.size() != 1) {
+        sendResponse("-ERR INCR requires exactly one key\r\n");
+        return;
+    }
+
+    const std::string& key = tokens[0];
+
+    std::lock_guard<std::mutex> lock(store_mutex);
+    auto it = kv_store.find(key);
+    if (it != kv_store.end()) {
+        if (it->second.expiry && Clock::now() >= it->second.expiry.value()) {
+            kv_store.erase(it);
+            kv_store[key] = {"1", std::nullopt};
+            sendResponse(":1\r\n");
+            return;
+        }
+        try {
+            int64_t current_value = std::stoll(it->second.value);
+            current_value++;
+            it->second.value = std::to_string(current_value);
+            sendResponse(":" + std::to_string(current_value) + "\r\n");
+        } catch (...) {
+            sendResponse("-ERR value is not an integer or out of range\r\n");
+        }
+    } else {
+        kv_store[key] = {"1", std::nullopt};
+        sendResponse(":1\r\n");
+    }
 }
 
 void KvStoreHandler::sendResponse(const std::string& response) {

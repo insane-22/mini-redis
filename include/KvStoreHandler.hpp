@@ -24,6 +24,7 @@ private:
     int client_fd;
     void handleSet(const std::vector<std::string>& args);
     void handleGet(const std::vector<std::string>& args);
+    void handleIncr(const std::vector<std::string>& args);
 
     void sendResponse(const std::string& response);
 
