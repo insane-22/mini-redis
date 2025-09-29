@@ -1,4 +1,5 @@
 #include "Handler.hpp"
+#include "Rdb.hpp"
 #include <sys/socket.h>
 
 Handler::Handler(int client_fd, bool replica)
@@ -61,6 +62,10 @@ void Handler::handleMessage(const std::string& message) {
                 std::string replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
                 std::string response = "+FULLRESYNC " + replid + " 0\r\n";
                 sendResponse(response);
+                size_t rdb_len = Rdb::emptyRdbLen();
+                std::string header = "$" + std::to_string(rdb_len) + "\r\n";
+                send(client_fd, header.c_str(), header.size(), 0);
+                send(client_fd, Rdb::emptyRdbData(), rdb_len, 0);
             } else {
                 sendResponse("-ERR invalid PSYNC args\r\n");
             }
