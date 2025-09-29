@@ -5,6 +5,7 @@
 #include <chrono>
 #include <sys/socket.h>
 #include <cctype>
+#include <unordered_set>
 
 
 static std::condition_variable global_cv;
@@ -16,6 +17,11 @@ StreamStoreHandler::StreamStoreHandler(int client_fd) : client_fd(client_fd) {}
 
 bool StreamStoreHandler::isStreamCommand(const std::string& cmd) {
     return cmd == "XADD" || cmd == "XRANGE" || cmd == "XREAD";
+}
+
+bool StreamStoreHandler::isWriteCommand(const std::string& cmd) {
+    static const std::unordered_set<std::string> writeCommands = {"XADD"};
+    return writeCommands.count(cmd) > 0;
 }
 
 void StreamStoreHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {

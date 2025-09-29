@@ -10,6 +10,7 @@ public:
     explicit ListStoreHandler(int client_fd);
 
     bool isListCommand(const std::string& cmd);
+    bool isWriteCommand(const std::string& cmd);
     void handleCommand(const std::string& cmd, const std::vector<std::string>& args);
     bool hasKey(const std::string& key);
     std::string typeName() const { return "list"; }

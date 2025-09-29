@@ -1,27 +1,32 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "Parser.hpp"
 #include "KvStoreHandler.hpp"
 #include "ListStoreHandler.hpp"
 #include "StreamStoreHandler.hpp"
+#include "ReplicationManager.hpp"
+#include "Rdb.hpp"
+#include "Parser.hpp"
 
 class Handler {
     int client_fd;
     bool isReplica;
+    bool in_transaction = false;
+
     KvStoreHandler kvHandler;
     ListStoreHandler listHandler;
     StreamStoreHandler streamHandler;
+    ReplicationManager* replManager = nullptr;
 
-    bool in_transaction = false;
     std::vector<std::pair<std::string, std::vector<std::string>>> queued_commands;
 
 public:
-    explicit Handler(int fd, bool replica = false);
-    void handleMessage(const std::string& message);
+    Handler(int client_fd, bool replica, ReplicationManager* rm = nullptr);
 
-private:
-    void sendResponse(const std::string& response);
+    void handleMessage(const std::string& message);
     void handleTypeCommand(const std::vector<std::string>& args);
+    void executeCommand(const std::string& name, const std::vector<std::string>& args);
     void executeQueuedCommand(const std::string& cmd, const std::vector<std::string>& args);
+    void propagateIfWrite(const std::string& name, const std::vector<std::string>& args);
+    void sendResponse(const std::string& response);
 };

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <sys/socket.h>
+#include <unordered_set>
 
 using Clock = std::chrono::steady_clock;
 
@@ -12,6 +13,11 @@ KvStoreHandler::KvStoreHandler(int client_fd) : client_fd(client_fd) {}
 
 bool KvStoreHandler::isKvCommand(const std::string& cmd) {
     return cmd == "SET" || cmd == "GET" || cmd == "INCR";
+}
+
+bool KvStoreHandler::isWriteCommand(const std::string& cmd) {
+    static const std::unordered_set<std::string> writeCommands = {"SET", "INCR"};
+    return writeCommands.count(cmd) > 0;
 }
 
 void KvStoreHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {

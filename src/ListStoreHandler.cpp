@@ -3,6 +3,7 @@
 #include <iostream>
 #include <chrono>
 #include <sys/socket.h>
+#include <unordered_set>
 
 std::unordered_map<std::string, std::vector<std::string>> ListStoreHandler::list_store;
 std::mutex ListStoreHandler::store_mutex;
@@ -13,6 +14,11 @@ ListStoreHandler::ListStoreHandler(int client_fd) : client_fd(client_fd) {}
 bool ListStoreHandler::isListCommand(const std::string& cmd) {
     return cmd == "LPUSH" || cmd == "RPUSH" || cmd == "LRANGE" ||
            cmd == "LLEN" || cmd == "LPOP" || cmd == "BLPOP";
+}
+
+bool ListStoreHandler::isWriteCommand(const std::string& cmd) {
+    static const std::unordered_set<std::string> writeCommands = {"LPUSH", "RPUSH"};
+    return writeCommands.count(cmd) > 0;
 }
 
 void ListStoreHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {

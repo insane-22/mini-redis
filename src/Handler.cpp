@@ -1,13 +1,11 @@
 #include "Handler.hpp"
-#include "Rdb.hpp"
 #include <sys/socket.h>
+#include <unistd.h>
 
-Handler::Handler(int client_fd, bool replica)
-    : client_fd(client_fd),
-      isReplica(replica),
-      kvHandler(client_fd),
-      listHandler(client_fd),
-      streamHandler(client_fd) {}
+Handler::Handler(int client_fd, bool replica, ReplicationManager* rm)
+    : client_fd(client_fd), isReplica(replica),
+      kvHandler(client_fd), listHandler(client_fd),
+      streamHandler(client_fd), replManager(rm) {}
 
 void Handler::handleMessage(const std::string& message) {
     Parser parser;
@@ -40,7 +38,8 @@ void Handler::handleMessage(const std::string& message) {
                 } else {
                     sendResponse("*" + std::to_string(queued_commands.size()) + "\r\n");
                     for (auto& [qname, qargs] : queued_commands) {
-                        executeQueuedCommand(qname, qargs);
+                        executeCommand(qname, qargs);
+                        propagateIfWrite(qname, qargs);
                     }
                 }
                 queued_commands.clear();
@@ -66,6 +65,7 @@ void Handler::handleMessage(const std::string& message) {
                 std::string header = "$" + std::to_string(rdb_len) + "\r\n";
                 send(client_fd, header.c_str(), header.size(), 0);
                 send(client_fd, Rdb::emptyRdbData(), rdb_len, 0);
+                if (replManager) replManager->addReplica(client_fd);
             } else {
                 sendResponse("-ERR invalid PSYNC args\r\n");
             }
@@ -76,13 +76,8 @@ void Handler::handleMessage(const std::string& message) {
                 queued_commands.emplace_back(name, cmd.args);
                 sendResponse("+QUEUED\r\n");
             } else {
-                if (kvHandler.isKvCommand(name)) {
-                    kvHandler.handleCommand(name, cmd.args);
-                } else if (listHandler.isListCommand(name)) {
-                    listHandler.handleCommand(name, cmd.args);
-                } else if (streamHandler.isStreamCommand(name)) {
-                    streamHandler.handleCommand(name, cmd.args);
-                }
+                executeCommand(name, cmd.args);
+                propagateIfWrite(name, cmd.args);
             }
         } else if (name == "INFO" || name == "info") {
             if (cmd.args.size() == 1 && cmd.args[0] == "replication") {
@@ -96,14 +91,34 @@ void Handler::handleMessage(const std::string& message) {
                     info = "role:slave";
                 }
                 std::string response = "$" + std::to_string(info.size()) + "\r\n" + info + "\r\n";
-                sendResponse(response);
+                sendResponse(response);            
             }
         } else {
             sendResponse("-ERR Unknown command\r\n");
         }
+
     } catch (const std::exception& e) {
         sendResponse("-ERR " + std::string(e.what()) + "\r\n");
     }
+}
+
+void Handler::executeCommand(const std::string& name, const std::vector<std::string>& args) {
+    if (kvHandler.isKvCommand(name)) kvHandler.handleCommand(name, args);
+    else if (listHandler.isListCommand(name)) listHandler.handleCommand(name, args);
+    else if (streamHandler.isStreamCommand(name)) streamHandler.handleCommand(name, args);
+}
+
+void Handler::propagateIfWrite(const std::string& name, const std::vector<std::string>& args) {
+    if (!replManager) return;
+
+    bool isWrite = (kvHandler.isWriteCommand(name) ||
+                    listHandler.isWriteCommand(name) ||
+                    streamHandler.isWriteCommand(name));
+    if (!isWrite) return;
+
+    std::vector<std::string> cmdParts = {name};
+    cmdParts.insert(cmdParts.end(), args.begin(), args.end());
+    replManager->propagateCommand(cmdParts);
 }
 
 void Handler::handleTypeCommand(const std::vector<std::string>& args) {
@@ -126,15 +141,7 @@ void Handler::handleTypeCommand(const std::vector<std::string>& args) {
 }
 
 void Handler::executeQueuedCommand(const std::string& cmd, const std::vector<std::string>& args) {
-    if (kvHandler.isKvCommand(cmd)) {
-        kvHandler.handleCommand(cmd, args);
-    } else if (listHandler.isListCommand(cmd)) {
-        listHandler.handleCommand(cmd, args);
-    } else if (streamHandler.isStreamCommand(cmd)) {
-        streamHandler.handleCommand(cmd, args);
-    } else {
-        sendResponse("-ERR Unknown command\r\n");
-    }
+    executeCommand(cmd, args);
 }
 
 void Handler::sendResponse(const std::string& response) {
