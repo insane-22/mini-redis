@@ -54,6 +54,16 @@ void Handler::handleMessage(const std::string& message) {
             }
         } else if (name == "TYPE") {
             handleTypeCommand(cmd.args);
+        } else if (name == "REPLCONF") {
+            sendResponse("+OK\r\n");
+        } else if (name == "PSYNC") {
+            if (cmd.args.size() == 2 && cmd.args[0] == "?" && cmd.args[1] == "-1") {
+                std::string replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+                std::string response = "+FULLRESYNC " + replid + " 0\r\n";
+                sendResponse(response);
+            } else {
+                sendResponse("-ERR invalid PSYNC args\r\n");
+            }
         } else if (kvHandler.isKvCommand(name) ||
                    listHandler.isListCommand(name) ||
                    streamHandler.isStreamCommand(name)) {
