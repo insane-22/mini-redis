@@ -11,9 +11,10 @@
 #include <vector>
 #include "Handler.hpp"
 #include "ReplicaClient.hpp"
+#include "ReplicationManager.hpp"
 
-void handleResponse(int client_fd, bool isReplica) {
-  Handler handler(client_fd, isReplica);
+void handleResponse(int client_fd, bool isReplica, ReplicationManager* replManager) {
+  Handler handler(client_fd, isReplica, replManager);
 
   char buffer[1024];
   while(true){
@@ -26,6 +27,10 @@ void handleResponse(int client_fd, bool isReplica) {
 
     std::string message(buffer, bytes_received);
     handler.handleMessage(message);
+  }
+
+  if (replManager) {
+    replManager->removeReplica(client_fd);
   }
   close(client_fd);
 }
@@ -60,6 +65,7 @@ int main(int argc, char **argv) {
     }
   }
 
+  ReplicationManager replManager;
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
     std::cerr << "Failed to create server socket\n";
@@ -95,6 +101,7 @@ int main(int argc, char **argv) {
         ReplicaClient replica(masterHost, masterPort, port);
         replica.connectToMaster();
         replica.startHandshake();
+        replica.startReplicationLoop();
       } catch (const std::exception &ex) {
         std::cerr << "Replica thread exception: " << ex.what() << "\n";
       }
@@ -113,7 +120,7 @@ int main(int argc, char **argv) {
     }
     std::cout << "Client connected\n";
 
-    std::thread clients(handleResponse, client_fd, isReplica);
+    std::thread clients(handleResponse, client_fd, isReplica, &replManager);
     clients.detach();
   }
 

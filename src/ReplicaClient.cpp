@@ -1,4 +1,5 @@
 #include "ReplicaClient.hpp"
+#include "Handler.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -13,6 +14,22 @@ ReplicaClient::~ReplicaClient() {
     if (sock_fd != -1) {
         close(sock_fd);
         sock_fd = -1;
+    }
+}
+
+void ReplicaClient::startReplicationLoop() {
+    char buffer[4096];
+    while (true) {
+        memset(buffer, 0, sizeof(buffer));
+        int n = recv(sock_fd, buffer, sizeof(buffer)-1, 0);
+        if (n <= 0) {
+            std::cerr << "Master closed replication connection\n";
+            break;
+        }
+
+        std::string msg(buffer, n);
+        Handler handler(sock_fd, true, nullptr);
+        handler.handleMessage(msg);
     }
 }
 
