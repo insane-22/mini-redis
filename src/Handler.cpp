@@ -2,10 +2,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-Handler::Handler(int client_fd, bool replica, ReplicationManager* rm)
+Handler::Handler(int client_fd, bool replica, ReplicationManager* rm, const std::string& dir, const std::string& filename)
     : client_fd(client_fd), isReplica(replica),
       kvHandler(client_fd), listHandler(client_fd),
-      streamHandler(client_fd), replManager(rm) {}
+      streamHandler(client_fd), replManager(rm), 
+      rdb_dir(dir), rdb_filename(filename) {}
 
 void Handler::handleMessage(const std::string& message) {
     Parser parser;
@@ -92,6 +93,23 @@ void Handler::handleMessage(const std::string& message) {
                 }
                 std::string response = "$" + std::to_string(info.size()) + "\r\n" + info + "\r\n";
                 sendResponse(response);            
+            }
+        } else if (name == "CONFIG" && !cmd.args.empty() && cmd.args[0] == "GET") {
+            if (cmd.args.size() < 2) {
+                sendResponse("-ERR CONFIG GET requires a parameter\r\n");
+            } else {
+                std::string param = cmd.args[1];
+                std::string value;
+
+                if (param == "dir") value = rdb_dir;
+                else if (param == "dbfilename") value = rdb_filename;
+                else value = "";
+    
+                std::string resp = "*2\r\n";
+                resp += "$" + std::to_string(param.size()) + "\r\n" + param + "\r\n";
+                resp += "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
+
+                sendResponse(resp);
             }
         } else {
             sendResponse("-ERR Unknown command\r\n");

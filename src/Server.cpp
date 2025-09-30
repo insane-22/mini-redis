@@ -13,8 +13,8 @@
 #include "ReplicaClient.hpp"
 #include "ReplicationManager.hpp"
 
-void handleResponse(int client_fd, bool isReplica, ReplicationManager* replManager) {
-  Handler handler(client_fd, isReplica, replManager);
+void handleResponse(int client_fd, bool isReplica, ReplicationManager* replManager, std::string rdb_dir, std::string rdb_filename) {
+  Handler handler(client_fd, isReplica, replManager, rdb_dir, rdb_filename);
 
   char buffer[1024];
   while(true){
@@ -43,6 +43,9 @@ int main(int argc, char **argv) {
   bool isReplica = false;
   std::string masterHost;
   int masterPort = 0;
+  std::string rdb_dir = "./";
+  std::string rdb_filename = "dump.rdb";
+
   for(int i=1;i<argc;i++){
     std::string arg=argv[i];
     if (arg=="--port" && i + 1 < argc) {
@@ -62,6 +65,10 @@ int main(int argc, char **argv) {
         std::cerr << "--replicaof requires host and port\n";
         return 1;
       }
+    } else if (arg=="--dir" && i+1<argc) {
+      rdb_dir = argv[++i];
+    } else if (arg=="--dbfilename" && i+1<argc) {
+      rdb_filename = argv[++i];
     }
   }
 
@@ -120,7 +127,7 @@ int main(int argc, char **argv) {
     }
     std::cout << "Client connected\n";
 
-    std::thread clients(handleResponse, client_fd, isReplica, &replManager);
+    std::thread clients(handleResponse, client_fd, isReplica, &replManager, rdb_dir, rdb_filename);
     clients.detach();
   }
 

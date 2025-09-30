@@ -28,7 +28,7 @@ void ReplicaClient::startReplicationLoop() {
         }
 
         std::string msg(buffer, n);
-        Handler handler(sock_fd, true, nullptr);
+        Handler handler(sock_fd, true, nullptr,"./", "dump.rdb");
         handler.handleMessage(msg);
     }
 }

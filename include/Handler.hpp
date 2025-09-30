@@ -12,6 +12,8 @@ class Handler {
     int client_fd;
     bool isReplica;
     bool in_transaction = false;
+    std::string rdb_dir;
+    std::string rdb_filename;
 
     KvStoreHandler kvHandler;
     ListStoreHandler listHandler;
@@ -21,7 +23,7 @@ class Handler {
     std::vector<std::pair<std::string, std::vector<std::string>>> queued_commands;
 
 public:
-    Handler(int client_fd, bool replica, ReplicationManager* rm = nullptr);
+    Handler(int client_fd, bool replica, ReplicationManager* rm = nullptr, const std::string& dir = "./", const std::string& filename = "dump.rdb");
 
     void handleMessage(const std::string& message);
     void handleTypeCommand(const std::vector<std::string>& args);
