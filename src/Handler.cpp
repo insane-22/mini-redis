@@ -1,6 +1,7 @@
 #include "Handler.hpp"
 #include <sys/socket.h>
 #include <unistd.h>
+#include <sstream>
 
 Handler::Handler(int client_fd, bool replica, ReplicationManager* rm, const std::string& dir, const std::string& filename)
     : client_fd(client_fd), isReplica(replica),
@@ -110,6 +111,31 @@ void Handler::handleMessage(const std::string& message) {
                 resp += "$" + std::to_string(value.size()) + "\r\n" + value + "\r\n";
 
                 sendResponse(resp);
+            }
+        } else if (name == "KEYS") {
+            if (cmd.args.size() != 1) {
+                sendResponse("-ERR KEYS requires a pattern\r\n");
+            } else if (cmd.args[0] != "*") {
+                sendResponse("-ERR only '*' pattern is supported in this implementation\r\n");
+            } else {
+                std::string path;
+                if (rdb_dir.empty()) path = rdb_filename;
+                else {
+                    path = rdb_dir;
+                    if (path.back() != '/') path.push_back('/');
+                    path += rdb_filename;
+                }
+
+                RdbReader reader(path);
+                reader.load(); 
+                std::vector<std::string> keys = reader.getKeys(0);
+
+                std::ostringstream out;
+                out << "*" << keys.size() << "\r\n";
+                for (const auto &k : keys) {
+                    out << "$" << k.size() << "\r\n" << k << "\r\n";
+                }
+                sendResponse(out.str());
             }
         } else {
             sendResponse("-ERR Unknown command\r\n");

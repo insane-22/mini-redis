@@ -7,6 +7,7 @@
 #include "ReplicationManager.hpp"
 #include "Rdb.hpp"
 #include "Parser.hpp"
+#include "RdbReader.hpp"
 
 class Handler {
     int client_fd;
