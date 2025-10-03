@@ -5,6 +5,11 @@
 #include <vector>
 #include <mutex>
 
+struct ZSet {
+    std::map<std::pair<double, std::string>, std::string> ordered;   
+    std::unordered_map<std::string, double> lookup;                 
+};
+
 class SortedSetHandler {
 public:
     explicit SortedSetHandler(int client_fd);
@@ -15,10 +20,11 @@ public:
 private:
     int client_fd;
 
-    std::unordered_map<std::string, std::map<std::string, double>> sorted_sets;
+    std::unordered_map<std::string, ZSet> sorted_sets;
     std::mutex store_mutex;
 
     void handleZAdd(const std::vector<std::string>& args);
     void handleZRank(const std::vector<std::string>& args);
+    void handleZRange(const std::vector<std::string>& args);
     void sendResponse(const std::string& response);
 };

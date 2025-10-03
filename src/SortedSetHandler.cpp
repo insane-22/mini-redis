@@ -8,12 +8,13 @@
 SortedSetHandler::SortedSetHandler(int client_fd) : client_fd(client_fd) {}
 
 bool SortedSetHandler::isSortedSetCommand(const std::string& cmd) {
-    return cmd == "ZADD" || cmd == "ZRANK";
+    return cmd == "ZADD" || cmd == "ZRANK" || cmd == "ZRANGE";
 }
 
 void SortedSetHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd == "ZADD") handleZAdd(args);
     else if(cmd == "ZRANK") handleZRank(args);
+    else if(cmd == "ZRANGE") handleZRange(args);
     else sendResponse("-ERR Unsupported sorted set command\r\n");
 }
 
@@ -32,10 +33,14 @@ void SortedSetHandler::handleZAdd(const std::vector<std::string>& args) {
         std::lock_guard<std::mutex> lock(store_mutex);
 
         auto& zset = sorted_sets[key];
-        if (zset.find(member) == zset.end()) {
-            added = true;   
+        auto it = zset.lookup.find(member);
+        if (it != zset.lookup.end()) {
+            zset.ordered.erase({it->second, member});
+        } else {
+            added = true;
         }
-        zset[member] = score;
+        zset.lookup[member] = score;
+        zset.ordered[{score, member}] = member;
     }
 
     sendResponse(":" + std::to_string(added ? 1 : 0) + "\r\n");
@@ -50,40 +55,94 @@ void SortedSetHandler::handleZRank(const std::vector<std::string>& args) {
     const std::string& key = args[0];
     const std::string& member = args[1];
 
-    std::vector<std::pair<double, std::string>> sorted_members;
+    int rank = 0;
+    bool found = false;
+
     {
         std::lock_guard<std::mutex> lock(store_mutex);
 
         auto it = sorted_sets.find(key);
         if (it == sorted_sets.end()) {
-            sendResponse("$-1\r\n"); 
+            sendResponse("$-1\r\n");
             return;
         }
-        for (const auto& [m, s] : it->second) {
-            sorted_members.emplace_back(s, m);
+
+        const auto& zset = it->second;
+
+        auto lookupIt = zset.lookup.find(member);
+        if (lookupIt == zset.lookup.end()) {
+            sendResponse("$-1\r\n");
+            return;
         }
-    }
-
-    std::sort(sorted_members.begin(), sorted_members.end(), [](const auto& a, const auto& b) {
-        if (a.first != b.first) return a.first < b.first;
-        return a.second < b.second;
-    });
-
-    int rank = 0;
-    bool found = false;
-    for (size_t i = 0; i < sorted_members.size(); ++i) {
-        if (sorted_members[i].second == member) {
-            rank = static_cast<int>(i);
-            found = true;
-            break;
+        for (const auto& [score_member, mem] : zset.ordered) {
+            if (mem == member) {
+                found = true;
+                break;
+            }
+            rank++;
         }
     }
 
     if (!found) {
-        sendResponse("$-1\r\n"); 
+        sendResponse("$-1\r\n");
     } else {
         sendResponse(":" + std::to_string(rank) + "\r\n");
     }
+}
+
+void SortedSetHandler::handleZRange(const std::vector<std::string>& args) {
+    if (args.size() < 3) {
+        sendResponse("-ERR ZRANGE requires key, start and stop\r\n");
+        return;
+    }
+
+    const std::string& key = args[0];
+    int start = std::stoi(args[1]);
+    int stop = std::stoi(args[2]);
+
+    std::vector<std::string> result;
+
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+
+        auto it = sorted_sets.find(key);
+        if (it == sorted_sets.end()) {
+            sendResponse("*0\r\n"); 
+            return;
+        }
+
+        const auto& zset = it->second;
+        int n = static_cast<int>(zset.ordered.size());
+
+        if (start < 0) start = n + start;
+        if (stop < 0) stop = n + stop;
+
+        if (start < 0) start = 0;
+        if (stop < 0) stop = 0;
+        if (stop >= n) stop = n - 1;
+
+        if (start > stop || start >= n) {
+            sendResponse("*0\r\n");
+            return;
+        }
+
+        int idx = 0;
+        for (const auto& [score_member, mem] : zset.ordered) {
+            if (idx >= start && idx <= stop) {
+                result.push_back(mem);
+            }
+            if (idx > stop) break;
+            idx++;
+        }
+    }
+
+    std::ostringstream resp;
+    resp << "*" << result.size() << "\r\n";
+    for (const auto& mem : result) {
+        resp << "$" << mem.size() << "\r\n" << mem << "\r\n";
+    }
+
+    sendResponse(resp.str());
 }
 
 void SortedSetHandler::sendResponse(const std::string& response) {
