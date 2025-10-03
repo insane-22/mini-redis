@@ -25,6 +25,7 @@ public:
     void handleZRem(const std::vector<std::string>& args);
     void sendResponse(const std::string& response);
     std::optional<double> getScore(const std::string& key, const std::string& member);
+    std::vector<std::pair<std::string, double>> getAllWithScores(const std::string& key);
 
 private:
     int client_fd;

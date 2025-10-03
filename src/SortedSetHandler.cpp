@@ -252,6 +252,22 @@ std::optional<double> SortedSetHandler::getScore(const std::string& key, const s
     return mit->second;
 }
 
+std::vector<std::pair<std::string, double>> SortedSetHandler::getAllWithScores(const std::string& key) {
+    std::lock_guard<std::mutex> lock(store_mutex);
+
+    std::vector<std::pair<std::string, double>> result;
+
+    auto it = sorted_sets.find(key);
+    if (it == sorted_sets.end()) return result;
+
+    const auto& zset = it->second;
+    for (const auto& [score_member, member] : zset.ordered) {
+        result.emplace_back(member, score_member.first);
+    }
+
+    return result;
+}
+
 void SortedSetHandler::sendResponse(const std::string& response) {
     send(client_fd, response.c_str(), response.size(), 0);
 }

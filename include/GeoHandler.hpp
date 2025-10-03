@@ -15,4 +15,7 @@ private:
 
     void handleGeoAdd(const std::vector<std::string>& args);
     void handleGeoPos(const std::vector<std::string>& args);
+    void handleGeoDis(const std::vector<std::string>& args);
+    void handleGeoSearch(const std::vector<std::string>& args);
+    double haversine(double lat1, double lon1, double lat2, double lon2);
 };
