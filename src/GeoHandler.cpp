@@ -61,7 +61,7 @@ void GeoHandler::handleGeoPos(const std::vector<std::string>& args) {
     for (const auto& member : members) {
         auto scoreOpt = sortedSetHandler->getScore(key, member); 
         if (!scoreOpt.has_value()) {
-            resp << "$-1\r\n";  
+            resp << "*-1\r\n";  
             continue;
         }
 
@@ -72,10 +72,8 @@ void GeoHandler::handleGeoPos(const std::vector<std::string>& args) {
         lonSs << std::setprecision(17) << coords.longitude;
         latSs << std::setprecision(17) << coords.latitude;
 
-        // std::string lonStr = lonSs.str();
-        // std::string latStr = latSs.str();
-        std::string lonStr = "0";
-        std::string latStr = "0";
+        std::string lonStr = lonSs.str();
+        std::string latStr = latSs.str();
 
         resp << "*2\r\n";
         resp << "$" << lonStr.size() << "\r\n" << lonStr << "\r\n";
