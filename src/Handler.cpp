@@ -11,6 +11,7 @@ Handler::Handler(int client_fd, bool replica, ReplicationManager* rm, const std:
       listHandler(client_fd),
       streamHandler(client_fd), replManager(rm), 
       pubSubHandler(client_fd),
+      sortedSetHandler(client_fd),
       rdb_dir(dir), rdb_filename(filename) {
         rdbReader.load();
       }
@@ -85,7 +86,8 @@ void Handler::handleMessage(const std::string& message) {
         } else if (kvHandler.isKvCommand(name) ||
                    listHandler.isListCommand(name) ||
                    streamHandler.isStreamCommand(name) ||
-                   pubSubHandler.isPubSubCommand(name)) {
+                   pubSubHandler.isPubSubCommand(name) || 
+                   sortedSetHandler.isSortedSetCommand(name)) {
             if (in_transaction) {
                 queued_commands.emplace_back(name, cmd.args);
                 sendResponse("+QUEUED\r\n");
@@ -138,6 +140,7 @@ void Handler::executeCommand(const std::string& name, const std::vector<std::str
     else if (listHandler.isListCommand(name)) listHandler.handleCommand(name, args);
     else if (streamHandler.isStreamCommand(name)) streamHandler.handleCommand(name, args);
     else if (pubSubHandler.isPubSubCommand(name)) pubSubHandler.handleCommand(name, args);
+    else if (sortedSetHandler.isSortedSetCommand(name)) sortedSetHandler.handleCommand(name, args);
 }
 
 void Handler::propagateIfWrite(const std::string& name, const std::vector<std::string>& args) {

@@ -119,7 +119,6 @@ void PubSubHandler::handlePublish(const std::vector<std::string>& args) {
         }
     }
 
-    // Respond with number of clients subscribed
     sendResponse(":" + std::to_string(delivered) + "\r\n");
 }
 
