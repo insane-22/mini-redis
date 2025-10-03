@@ -12,12 +12,14 @@ public:
 
     bool isPubSubCommand(const std::string& cmd);
     void handleCommand(const std::string& cmd, const std::vector<std::string>& args);
-    std::string typeName() const { return "pubsub"; }
+    bool inSubscribedMode() const { return subscribed_mode; }
 
 private:
     int client_fd;
-    void handleSubscribe(const std::vector<std::string>& args);
+    bool subscribed_mode = false;
 
+    void handleSubscribe(const std::vector<std::string>& args);
+    void handlePing();
     void sendResponse(const std::string& response);
 
     static std::unordered_map<int, std::unordered_set<std::string>> client_channels;

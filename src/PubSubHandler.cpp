@@ -9,14 +9,20 @@ std::mutex PubSubHandler::store_mutex;
 PubSubHandler::PubSubHandler(int client_fd) : client_fd(client_fd) {}
 
 bool PubSubHandler::isPubSubCommand(const std::string& cmd) {
-    return cmd == "SUBSCRIBE";
+    return cmd == "SUBSCRIBE" || cmd=="PING";
 }
 
 void PubSubHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd == "SUBSCRIBE") {
         handleSubscribe(args);
+    } else if (cmd == "PING") {
+        handlePing();
     } else {
-        sendResponse("-ERR Unsupported PUB/SUB command\r\n");
+        if (subscribed_mode) {
+            sendResponse("-ERR Can't execute '" + cmd + "': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context\r\n");
+        } else {
+            sendResponse("-ERR Unsupported PUB/SUB command\r\n");
+        }
     }
 }
 
@@ -36,11 +42,22 @@ void PubSubHandler::handleSubscribe(const std::vector<std::string>& args) {
         count = static_cast<int>(channels.size());
     }
 
-    std::string response = "*3\r\n$9\r\nsubscribe\r\n";
+    subscribed_mode = true;
+
+    std::string response = "*3\r\n";
+    response += "$9\r\nsubscribe\r\n";
     response += "$" + std::to_string(channel.size()) + "\r\n" + channel + "\r\n";
     response += ":" + std::to_string(count) + "\r\n";
 
     sendResponse(response);
+}
+
+void PubSubHandler::handlePing() {
+    if (subscribed_mode) {
+        sendResponse("*2\r\n$4\r\npong\r\n$0\r\n\r\n");
+    } else {
+        sendResponse("+PONG\r\n");
+    }
 }
 
 void PubSubHandler::sendResponse(const std::string& response) {

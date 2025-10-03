@@ -21,9 +21,14 @@ void Handler::handleMessage(const std::string& message) {
         Command cmd = parser.parse(message);
         std::string name = cmd.name;
 
-        if (name == "PING") {
-            sendResponse("+PONG\r\n");
-        } else if (name == "ECHO") {
+        if (pubSubHandler.inSubscribedMode()) {
+            if (!pubSubHandler.isPubSubCommand(name) && name != "QUIT" && name != "RESET") {
+                sendResponse("-ERR Can't execute '" + name + "': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context\r\n");
+                return;
+            }
+        }
+
+        if (name == "ECHO") {
             if (!cmd.args.empty())
                 sendResponse("$" + std::to_string(cmd.args[0].size()) + "\r\n" + cmd.args[0] + "\r\n");
             else
