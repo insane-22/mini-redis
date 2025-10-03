@@ -18,18 +18,18 @@ ReplicaClient::~ReplicaClient() {
 }
 
 void ReplicaClient::startReplicationLoop() {
+    Handler handler(sock_fd, true, nullptr, "./", "dump.rdb"); 
     char buffer[4096];
     while (true) {
         memset(buffer, 0, sizeof(buffer));
-        int n = recv(sock_fd, buffer, sizeof(buffer)-1, 0);
+        int n = recv(sock_fd, buffer, sizeof(buffer) - 1, 0);
         if (n <= 0) {
             std::cerr << "Master closed replication connection\n";
             break;
         }
 
         std::string msg(buffer, n);
-        Handler handler(sock_fd, true, nullptr,"./", "dump.rdb");
-        handler.handleMessage(msg);
+        handler.handleMessage(msg);  
     }
 }
 
