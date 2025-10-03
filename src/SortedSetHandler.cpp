@@ -199,11 +199,10 @@ void SortedSetHandler::handleZScore(const std::vector<std::string>& args) {
         score = mit->second; 
     }
 
-    std::string scoreStr = std::to_string(*score);
-    scoreStr.erase(scoreStr.find_last_not_of('0') + 1, std::string::npos);
-    if (!scoreStr.empty() && scoreStr.back() == '.') {
-        scoreStr.pop_back();
-    }
+    std::ostringstream oss;
+    oss.precision(17);
+    oss << *score;
+    std::string scoreStr = oss.str();
 
     std::string result = "$" + std::to_string(scoreStr.size()) + "\r\n" + scoreStr + "\r\n";
     sendResponse(result);
