@@ -16,13 +16,6 @@ public:
 
     bool isSortedSetCommand(const std::string& cmd);
     void handleCommand(const std::string& cmd, const std::vector<std::string>& args);
-
-private:
-    int client_fd;
-
-    std::unordered_map<std::string, ZSet> sorted_sets;
-    std::mutex store_mutex;
-
     void handleZAdd(const std::vector<std::string>& args);
     void handleZRank(const std::vector<std::string>& args);
     void handleZRange(const std::vector<std::string>& args);
@@ -30,4 +23,11 @@ private:
     void handleZScore(const std::vector<std::string>& args);
     void handleZRem(const std::vector<std::string>& args);
     void sendResponse(const std::string& response);
+
+private:
+    int client_fd;
+
+    std::unordered_map<std::string, ZSet> sorted_sets;
+    std::mutex store_mutex;
+
 };

@@ -10,6 +10,7 @@
 #include "RdbReader.hpp"
 #include "PubSubHandler.hpp"
 #include "SortedSetHandler.hpp"
+#include "GeoHandler.hpp"
 
 class Handler {
     int client_fd;
@@ -24,6 +25,7 @@ class Handler {
     StreamStoreHandler streamHandler;
     PubSubHandler pubSubHandler;
     SortedSetHandler sortedSetHandler;
+    GeoHandler geoHandler;
     ReplicationManager* replManager = nullptr;
 
     std::vector<std::pair<std::string, std::vector<std::string>>> queued_commands;
