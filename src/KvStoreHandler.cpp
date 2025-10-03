@@ -3,16 +3,20 @@
 #include <algorithm>
 #include <sys/socket.h>
 #include <unordered_set>
+#include <set>
+#include <chrono>
+#include <sstream>
+#include "RdbReader.hpp"
 
 using Clock = std::chrono::steady_clock;
 
 std::unordered_map<std::string, ValueWithExpiry> KvStoreHandler::kv_store;
 std::mutex KvStoreHandler::store_mutex;
 
-KvStoreHandler::KvStoreHandler(int client_fd) : client_fd(client_fd) {}
+KvStoreHandler::KvStoreHandler(int client_fd, RdbReader* rdb): client_fd(client_fd), rdbReader(rdb) {}
 
 bool KvStoreHandler::isKvCommand(const std::string& cmd) {
-    return cmd == "SET" || cmd == "GET" || cmd == "INCR";
+    return cmd == "SET" || cmd == "GET" || cmd == "INCR" || cmd == "KEYS";
 }
 
 bool KvStoreHandler::isWriteCommand(const std::string& cmd) {
@@ -24,6 +28,7 @@ void KvStoreHandler::handleCommand(const std::string& cmd, const std::vector<std
     if (cmd == "SET") handleSet(args);
     else if (cmd == "GET") handleGet(args);
     else if (cmd == "INCR") handleIncr(args);
+    else if (cmd == "KEYS") handleKeys(args);
 }
 
 int64_t getCurrentTimeMs() {
@@ -68,6 +73,14 @@ void KvStoreHandler::handleGet(const std::vector<std::string>& tokens) {
 
     const std::string& key = tokens[0];
 
+    if (rdbReader) {
+        auto val = rdbReader->getValue(0, key);
+        if (val.has_value()) {
+            sendResponse("$" + std::to_string(val->size()) + "\r\n" + *val + "\r\n");
+            return;
+        }
+    }
+
     std::lock_guard<std::mutex> lock(store_mutex);
     auto it = kv_store.find(key);
     if (it != kv_store.end()) {
@@ -82,15 +95,53 @@ void KvStoreHandler::handleGet(const std::vector<std::string>& tokens) {
     }
 }
 
-bool KvStoreHandler::hasKey(const std::string& key) {
-    std::lock_guard<std::mutex> lock(store_mutex);
-    auto it = kv_store.find(key);
-    if (it != kv_store.end()) {
-        if (it->second.expiry && Clock::now() >= it->second.expiry.value()) {
-            kv_store.erase(it);
-            return false;
+void KvStoreHandler::handleKeys(const std::vector<std::string>& tokens) {
+    if (tokens.size() != 1 || tokens[0] != "*") {
+        sendResponse("-ERR Only KEYS * supported\r\n");
+        return;
+    }
+
+    std::set<std::string> keys_set;
+    if (rdbReader) {
+        auto rdbKeys = rdbReader->getKeys(0);
+        for (const auto &k : rdbKeys) keys_set.insert(k);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        for (auto it = kv_store.begin(); it != kv_store.end();) {
+            if (it->second.expiry && Clock::now() >= it->second.expiry.value()) {
+                it = kv_store.erase(it);
+            } else {
+                keys_set.insert(it->first);
+                ++it;
+            }
         }
-        return true;
+    }
+
+    std::ostringstream out;
+    out << "*" << keys_set.size() << "\r\n";
+    for (const auto &k : keys_set) {
+        out << "$" << k.size() << "\r\n" << k << "\r\n";
+    }
+    sendResponse(out.str());
+}
+
+bool KvStoreHandler::hasKey(const std::string& key) {
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        auto it = kv_store.find(key);
+        if (it != kv_store.end()) {
+            if (it->second.expiry && Clock::now() >= it->second.expiry.value()) {
+                kv_store.erase(it);
+                return false;
+            }
+            return true;
+        }
+    }
+    if (rdbReader) {
+        auto v = rdbReader->getValue(0, key);
+        return v.has_value();
     }
     return false;
 }
@@ -127,5 +178,12 @@ void KvStoreHandler::handleIncr(const std::vector<std::string>& tokens) {
 }
 
 void KvStoreHandler::sendResponse(const std::string& response) {
-    send(client_fd, response.c_str(), response.size(), 0);
+    size_t total = 0;
+    while (total < response.size()) {
+        ssize_t sent = send(client_fd, response.data() + total, response.size() - total, 0);
+        if (sent <= 0) {
+            break;
+        }
+        total += static_cast<size_t>(sent);
+    }
 }

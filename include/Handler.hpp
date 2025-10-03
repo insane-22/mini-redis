@@ -16,6 +16,7 @@ class Handler {
     std::string rdb_dir;
     std::string rdb_filename;
 
+    RdbReader rdbReader;
     KvStoreHandler kvHandler;
     ListStoreHandler listHandler;
     StreamStoreHandler streamHandler;

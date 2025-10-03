@@ -2,28 +2,71 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <chrono>
+#include <cstring>
+#include <iostream>
 
 RdbReader::RdbReader(const std::string &filepath) : filepath_(filepath) {}
 
 bool RdbReader::load() {
     std::ifstream in(filepath_, std::ios::binary);
     if (!in.is_open()) {
+        std::cerr << "RdbReader: file not found: " << filepath_ << " (continuing without load)\n";
         return true;
     }
     try {
-        bool ok = parseFile(in);
-        (void)ok;
+        if (!parseFile(in)) {
+            std::cerr << "RdbReader: parseFile returned false for " << filepath_ << "\n";
+        }
+    } catch (const std::exception &ex) {
+        std::cerr << "RdbReader: exception while parsing: " << ex.what() << "\n";
+        db_data_.clear();
     } catch (...) {
-        keys_by_db_.clear();
+        std::cerr << "RdbReader: unknown exception while parsing\n";
+        db_data_.clear();
     }
     in.close();
     return true;
 }
 
+const std::unordered_map<int, std::unordered_map<std::string, RdbEntry>>& RdbReader::getAllEntries() const {
+    return db_data_;
+}
+
 std::vector<std::string> RdbReader::getKeys(int db) const {
-    auto it = keys_by_db_.find(db);
-    if (it == keys_by_db_.end()) return {};
-    return it->second;
+    std::vector<std::string> result;
+    auto it = db_data_.find(db);
+    if (it == db_data_.end()) return result;
+
+    int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+
+    for (const auto &kv : it->second) {
+        const RdbEntry &entry = kv.second;
+        if (entry.expiry.has_value()) {
+            if (entry.expiry.value() <= now_ms) continue; // expired -> skip
+        }
+        result.push_back(kv.first);
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+std::optional<std::string> RdbReader::getValue(int db, const std::string &key) const {
+    auto it = db_data_.find(db);
+    if (it == db_data_.end()) return std::nullopt;
+    auto it2 = it->second.find(key);
+    if (it2 == it->second.end()) return std::nullopt;
+
+    if (it2->second.expiry.has_value()) {
+        int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+        if (now > it2->second.expiry.value()) {
+            return std::nullopt; 
+        }
+    }
+    return it2->second.value;
 }
 
 bool RdbReader::parseFile(std::ifstream &in) {
@@ -58,33 +101,39 @@ bool RdbReader::parseFile(std::ifstream &in) {
         }
 
         if (op == 0xFC) { 
-            (void)readUInt64LE(in);
+            uint64_t ts = readUInt64LE(in);
+            pending_expiry_ = static_cast<int64_t>(ts);
             if (!tryReadByte(in, op)) break;
         } else if (op == 0xFD) { 
-            (void)readUInt32LE(in);
+            uint32_t ts = readUInt32LE(in);
+            pending_expiry_ = static_cast<int64_t>(ts) * 1000;
             if (!tryReadByte(in, op)) break;
         }
 
         if (op == 0x00) { 
             std::string key = readString(in);
             std::string value = readString(in);
-            keys_by_db_[current_db].push_back(std::move(key));
-        } else if (op == 0x01) { 
+            RdbEntry entry;
+            entry.value = std::move(value);
+            entry.expiry = pending_expiry_;
+            if (entry.expiry.has_value()) {
+                int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()
+                ).count();
+                if (entry.expiry.value() <= now) {
+                    pending_expiry_.reset();
+                    continue;
+                }
+            }
+            db_data_[current_db][std::move(key)] = std::move(entry);
+            pending_expiry_.reset();
+        } else if (op == 0x01 || op == 0x02 || op == 0x03 ||    op == 0x04 || op == 0x05) {
             bool e=false; int t=0;
             uint64_t len = readLength(in, e, t);
-            for (uint64_t i=0;i<len;i++) readString(in);
-        } else if (op == 0x02) { 
-            bool e=false; int t=0;
-            uint64_t len = readLength(in, e, t);
-            for (uint64_t i=0;i<len;i++) readString(in);
-        } else if (op == 0x03 || op == 0x05) { 
-            bool e=false; int t=0;
-            uint64_t len = readLength(in, e, t);
-            for (uint64_t i=0;i<len;i++) { readString(in); readString(in); }
-        } else if (op == 0x04) {
-            bool e=false; int t=0;
-            uint64_t len = readLength(in, e, t);
-            for (uint64_t i=0;i<len;i++) { readString(in); readString(in); }
+            for (uint64_t i=0;i<len;i++) {
+                readString(in);
+                if (op == 0x03 || op == 0x04 || op == 0x05) readString(in);
+            }
         } else {
             throw std::runtime_error("Unsupported RDB object type encountered");
         }
@@ -156,14 +205,12 @@ uint64_t RdbReader::readLength(std::ifstream &in, bool &isEncoded, int &encType)
         return static_cast<uint64_t>(first & 0x3F);
     } else if (top == 1) {
         uint8_t second = readByte(in);
-        return ((static_cast<uint64_t>(first & 0x3F) << 8) | second);
+        return ((static_cast<uint64_t>(first & 0x3F) << 8) | static_cast<uint64_t>(second));
     } else if (top == 2) {
-        if (first == 0x80) return static_cast<uint64_t>(readUInt32BE(in));
-        if (first == 0x81) return readUInt64BE(in);
         return static_cast<uint64_t>(readUInt32BE(in));
-    } else { // top == 3 => special encoding
+    } else {
         isEncoded = true;
-        encType = first & 0x3F;
+        encType = static_cast<int>(first & 0x3F);
         return 0;
     }
 }

@@ -6,6 +6,8 @@
 #include <mutex>
 #include <chrono>
 
+class RdbReader;
+
 struct ValueWithExpiry {
     std::string value;
     std::optional<std::chrono::steady_clock::time_point> expiry;
@@ -13,7 +15,7 @@ struct ValueWithExpiry {
 
 class KvStoreHandler {
 public:
-    explicit KvStoreHandler(int client_fd);
+    explicit KvStoreHandler(int client_fd, RdbReader* rdbReader);
 
     bool isKvCommand(const std::string& cmd);
     bool isWriteCommand(const std::string& cmd);
@@ -23,9 +25,12 @@ public:
 
 private:
     int client_fd;
+    RdbReader* rdbReader;
+
     void handleSet(const std::vector<std::string>& args);
     void handleGet(const std::vector<std::string>& args);
     void handleIncr(const std::vector<std::string>& args);
+    void handleKeys(const std::vector<std::string>& args);
 
     void sendResponse(const std::string& response);
 
