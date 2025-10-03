@@ -14,4 +14,5 @@ private:
     SortedSetHandler* sortedSetHandler;
 
     void handleGeoAdd(const std::vector<std::string>& args);
+    void handleGeoPos(const std::vector<std::string>& args);
 };

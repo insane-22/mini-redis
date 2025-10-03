@@ -240,6 +240,18 @@ void SortedSetHandler::handleZRem(const std::vector<std::string>& args) {
     sendResponse(":" + std::to_string(removed ? 1 : 0) + "\r\n");
 }
 
+std::optional<double> SortedSetHandler::getScore(const std::string& key, const std::string& member) {
+    std::lock_guard<std::mutex> lock(store_mutex);
+
+    auto it = sorted_sets.find(key);
+    if (it == sorted_sets.end()) return std::nullopt;
+
+    auto mit = it->second.lookup.find(member);
+    if (mit == it->second.lookup.end()) return std::nullopt;
+
+    return mit->second;
+}
+
 void SortedSetHandler::sendResponse(const std::string& response) {
     send(client_fd, response.c_str(), response.size(), 0);
 }

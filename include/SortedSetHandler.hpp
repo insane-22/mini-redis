@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include<optional>
 
 struct ZSet {
     std::map<std::pair<double, std::string>, std::string> ordered;   
@@ -23,6 +24,7 @@ public:
     void handleZScore(const std::vector<std::string>& args);
     void handleZRem(const std::vector<std::string>& args);
     void sendResponse(const std::string& response);
+    std::optional<double> getScore(const std::string& key, const std::string& member);
 
 private:
     int client_fd;
