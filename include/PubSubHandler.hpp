@@ -20,8 +20,11 @@ private:
 
     void handleSubscribe(const std::vector<std::string>& args);
     void handlePing();
+    void handleUnsubscribe(const std::vector<std::string>& args);
+    void handlePublish(const std::vector<std::string>& args);
     void sendResponse(const std::string& response);
 
     static std::unordered_map<int, std::unordered_set<std::string>> client_channels;
     static std::mutex store_mutex;
+    static std::unordered_map<std::string, std::unordered_set<int>> channel_subscribers;
 };
