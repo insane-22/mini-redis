@@ -4,17 +4,22 @@
 #include <cstdlib>
 #include <optional>
 #include <sys/socket.h>
+#include <algorithm>
 
 SortedSetHandler::SortedSetHandler(int client_fd) : client_fd(client_fd) {}
 
 bool SortedSetHandler::isSortedSetCommand(const std::string& cmd) {
-    return cmd == "ZADD" || cmd == "ZRANK" || cmd == "ZRANGE";
+    return cmd == "ZADD" || cmd == "ZRANK" || cmd == "ZRANGE" ||
+        cmd == "ZCARD" || cmd == "ZSCORE" || cmd == "ZREM";
 }
 
 void SortedSetHandler::handleCommand(const std::string& cmd, const std::vector<std::string>& args) {
     if (cmd == "ZADD") handleZAdd(args);
     else if(cmd == "ZRANK") handleZRank(args);
     else if(cmd == "ZRANGE") handleZRange(args);
+    else if(cmd == "ZCARD") handleZCard(args);
+    else if(cmd == "ZSCORE") handleZScore(args);
+    else if(cmd == "ZREM") handleZRem(args);
     else sendResponse("-ERR Unsupported sorted set command\r\n");
 }
 
@@ -143,6 +148,97 @@ void SortedSetHandler::handleZRange(const std::vector<std::string>& args) {
     }
 
     sendResponse(resp.str());
+}
+
+void SortedSetHandler::handleZCard(const std::vector<std::string>& args) {
+    if (args.size() < 1) {
+        sendResponse("-ERR ZCARD requires key\r\n");
+        return;
+    }
+
+    const std::string& key = args[0];
+    int card = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+
+        auto it = sorted_sets.find(key);
+        if (it != sorted_sets.end()) {
+            card = static_cast<int>(it->second.lookup.size());
+        }
+    }
+
+    sendResponse(":" + std::to_string(card) + "\r\n");
+}
+
+void SortedSetHandler::handleZScore(const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        sendResponse("-ERR ZSCORE requires key and member\r\n");
+        return;
+    }
+
+    const std::string& key = args[0];
+    const std::string& member = args[1];
+    std::optional<double> score;
+
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+
+       auto it = sorted_sets.find(key);
+        if (it == sorted_sets.end()) {
+            sendResponse("$-1\r\n"); 
+            return;
+        }
+
+        auto mit = it->second.lookup.find(member);
+        if (mit == it->second.lookup.end()) {
+            sendResponse("$-1\r\n");
+            return;
+        }
+
+        score = mit->second; 
+    }
+
+    std::string scoreStr = std::to_string(*score);
+    scoreStr.erase(scoreStr.find_last_not_of('0') + 1, std::string::npos);
+    if (!scoreStr.empty() && scoreStr.back() == '.') {
+        scoreStr.pop_back();
+    }
+
+    std::string result = "$" + std::to_string(scoreStr.size()) + "\r\n" + scoreStr + "\r\n";
+    sendResponse(result);
+}
+
+void SortedSetHandler::handleZRem(const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        sendResponse("-ERR ZREM requires key and member\r\n");
+        return;
+    }
+
+    const std::string& key = args[0];
+    const std::string& member = args[1];
+    bool removed = false;
+
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+
+        auto it = sorted_sets.find(key);
+        if (it == sorted_sets.end()) {
+            sendResponse(":0\r\n");
+            return;
+        }
+
+        auto& zset = it->second;
+        auto mit = zset.lookup.find(member);
+        if (mit != zset.lookup.end()) {
+            double score = mit->second;
+            zset.ordered.erase({score, member});
+            zset.lookup.erase(mit);
+            removed = true;
+        }
+    }
+
+    sendResponse(":" + std::to_string(removed ? 1 : 0) + "\r\n");
 }
 
 void SortedSetHandler::sendResponse(const std::string& response) {

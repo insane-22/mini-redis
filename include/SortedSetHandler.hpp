@@ -26,5 +26,8 @@ private:
     void handleZAdd(const std::vector<std::string>& args);
     void handleZRank(const std::vector<std::string>& args);
     void handleZRange(const std::vector<std::string>& args);
+    void handleZCard(const std::vector<std::string>& args);
+    void handleZScore(const std::vector<std::string>& args);
+    void handleZRem(const std::vector<std::string>& args);
     void sendResponse(const std::string& response);
 };
