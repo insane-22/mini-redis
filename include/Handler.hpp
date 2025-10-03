@@ -8,6 +8,7 @@
 #include "Rdb.hpp"
 #include "Parser.hpp"
 #include "RdbReader.hpp"
+#include "PubSubHandler.hpp"
 
 class Handler {
     int client_fd;
@@ -20,6 +21,7 @@ class Handler {
     KvStoreHandler kvHandler;
     ListStoreHandler listHandler;
     StreamStoreHandler streamHandler;
+    PubSubHandler pubSubHandler;
     ReplicationManager* replManager = nullptr;
 
     std::vector<std::pair<std::string, std::vector<std::string>>> queued_commands;
