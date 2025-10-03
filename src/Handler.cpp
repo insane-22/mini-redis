@@ -183,6 +183,8 @@ void Handler::executeQueuedCommand(const std::string& cmd, const std::vector<std
 }
 
 void Handler::sendResponse(const std::string& response) {
+    if (isReplica) return;
+
     size_t total = 0;
     while (total < response.size()) {
         ssize_t sent = send(client_fd, response.data() + total, response.size() - total, 0);
