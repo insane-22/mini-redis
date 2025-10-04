@@ -6,6 +6,8 @@
 #include <netdb.h>
 #include <cstring>
 #include <errno.h>
+#include <string>
+#include <cstdlib>
 
 ReplicaClient::ReplicaClient(const std::string& host, int port, int replicaPort)
     : master_host(host), master_port(port), replica_port(replicaPort), sock_fd(-1) {}
@@ -17,19 +19,109 @@ ReplicaClient::~ReplicaClient() {
     }
 }
 
+static bool extractNextRespMessage(const std::string &buf, size_t &endIndex) {
+    if (buf.empty()) return false;
+    size_t pos = 0;
+    char t = buf[pos];
+
+    if (t == '+' || t == '-' || t == ':') {
+        size_t crlf = buf.find("\r\n", pos);
+        if (crlf == std::string::npos) return false;
+        endIndex = crlf + 2;
+        return true;
+    }
+
+    if (t == '$') {
+        size_t crlf = buf.find("\r\n", pos);
+        if (crlf == std::string::npos) return false;
+        std::string len_str = buf.substr(1, crlf - 1);
+        long len;
+        try {
+            len = std::stol(len_str);
+        } catch (...) {
+            return false;
+        }
+        if (len < 0) {
+            endIndex = crlf + 2;
+            return true;
+        }
+        size_t needed = crlf + 2 + static_cast<size_t>(len) + 2;
+        if (buf.size() < needed) return false;
+        endIndex = needed;
+        return true;
+    }
+
+    if (t == '*') {
+        size_t crlf = buf.find("\r\n", pos);
+        if (crlf == std::string::npos) return false;
+        std::string elements_str = buf.substr(1, crlf - 1);
+        int elements;
+        try {
+            elements = std::stoi(elements_str);
+        } catch (...) {
+            return false;
+        }
+        size_t idx = crlf + 2;
+        for (int i = 0; i < elements; ++i) {
+            if (idx >= buf.size()) return false;
+            char ct = buf[idx];
+            if (ct == '$') {
+                size_t crlf2 = buf.find("\r\n", idx);
+                if (crlf2 == std::string::npos) return false;
+                std::string len_str = buf.substr(idx + 1, crlf2 - (idx + 1));
+                long len;
+                try {
+                    len = std::stol(len_str);
+                } catch (...) {
+                    return false;
+                }
+                if (len < 0) {
+                    idx = crlf2 + 2;
+                } else {
+                    size_t need = crlf2 + 2 + static_cast<size_t>(len) + 2;
+                    if (buf.size() < need) return false;
+                    idx = need;
+                }
+            } else if (ct == '+' || ct == '-' || ct == ':') {
+                size_t crlf2 = buf.find("\r\n", idx);
+                if (crlf2 == std::string::npos) return false;
+                idx = crlf2 + 2;
+            } else if (ct == '*') {
+                return false;
+            } else {
+                return false; 
+            }
+        }
+        endIndex = idx;
+        return true;
+    }
+    return false; 
+}
+
 void ReplicaClient::startReplicationLoop() {
+    if (sock_fd == -1) {
+        std::cerr << "Replica: socket not connected\n";
+        return;
+    }
+
     Handler handler(sock_fd, true, nullptr, "./", "dump.rdb"); 
+
+    std::string recv_buffer;
     char buffer[4096];
     while (true) {
-        memset(buffer, 0, sizeof(buffer));
-        int n = recv(sock_fd, buffer, sizeof(buffer) - 1, 0);
+        ssize_t n = recv(sock_fd, buffer, sizeof(buffer), 0);
         if (n <= 0) {
             std::cerr << "Master closed replication connection\n";
             break;
         }
 
-        std::string msg(buffer, n);
-        handler.handleMessage(msg);  
+        recv_buffer.append(buffer, static_cast<size_t>(n));
+        size_t msg_end = 0;
+        while (extractNextRespMessage(recv_buffer, msg_end)) {
+            std::string msg = recv_buffer.substr(0, msg_end);
+            handler.handleMessage(msg); 
+            recv_buffer.erase(0, msg_end);
+        }
     }
 }
 
